@@ -10,6 +10,17 @@ export const TILE_DISPLAY_SCALE = GRID_TILE_PX / TILE_SOURCE_PX;
 export const CHARACTER_FRAME_PX = 64;
 export const CHARACTER_DIRECTION_COUNT = 4;
 
+// Every map entity (token, prop, future obstacle) stands at this vertical
+// fraction down its tile, so sprites, shadows, and props share one ground
+// line per square and y-sort consistently.
+export const TILE_GROUND_FRAC = 0.8;
+
+// Where the character art actually sits inside its 64px frame (measured
+// opaque bounds): feet near 0.72, head near 0.34. Used to anchor the
+// sprite's feet to the tile ground and place the HP bar above the head.
+export const CHARACTER_FEET_FRAC = 0.72;
+export const CHARACTER_HEAD_FRAC = 0.34;
+
 // How far a token lunges toward its target when attacking, and recoils
 // when hit (pixels).
 export const TOKEN_LUNGE_PX = 12;

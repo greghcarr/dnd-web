@@ -9,7 +9,15 @@ import Phaser from 'phaser';
 import type { Character } from 'dnd-srd-engine';
 import type { Placement } from '@/spatial/formation';
 import { animTextureKey, animKey } from '@/phaser/assets/asset-keys';
-import { GRID_TILE_PX, TOKEN_LUNGE_PX, TOKEN_RECOIL_PX } from '@/constants/layout';
+import {
+  GRID_TILE_PX,
+  CHARACTER_FRAME_PX,
+  TILE_GROUND_FRAC,
+  CHARACTER_FEET_FRAC,
+  CHARACTER_HEAD_FRAC,
+  TOKEN_LUNGE_PX,
+  TOKEN_RECOIL_PX,
+} from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
 import { HP_TWEEN_MS, HIT_FLASH_MS, TOKEN_LUNGE_MS } from '@/constants/timing';
 import {
@@ -26,15 +34,18 @@ import {
 } from '@/constants/colors';
 
 const SPRITE_SCALE = 1.4;
-const SPRITE_ORIGIN_Y = 0.82;
+// Feet sit at the container origin (the tile ground point); the head is
+// this far above it, so the HP bar and name sit just above the head.
+const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
+const HEAD_Y = -(CHARACTER_FEET_FRAC - CHARACTER_HEAD_FRAC) * DISPLAY_HEIGHT;
 const BAR_WIDTH = GRID_TILE_PX * 0.9;
 const BAR_HEIGHT = 5;
-const BAR_Y = -GRID_TILE_PX * 0.7;
-const NAME_Y = BAR_Y - 9;
-const RING_Y = GRID_TILE_PX * 0.28;
+const BAR_Y = HEAD_Y - 7;
+const NAME_Y = BAR_Y - 11;
 const RING_RADIUS_X = GRID_TILE_PX * 0.42;
-const RING_RADIUS_Y = GRID_TILE_PX * 0.22;
-const SHADOW_Y = GRID_TILE_PX * 0.34;
+const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
+const SHADOW_RADIUS_X = GRID_TILE_PX * 0.6;
+const SHADOW_RADIUS_Y = GRID_TILE_PX * 0.22;
 
 export class TokenView {
   private readonly scene: Phaser.Scene;
@@ -54,22 +65,24 @@ export class TokenView {
     this.characterKey = characterKey;
     this.facing = placement.facing;
     this.facingSign = placement.facing === 'right' ? 1 : -1;
+    // Container origin = the tile's ground point. Feet, shadow, and ring
+    // all sit at (0, 0) so the character stands in its square.
     const x = (placement.col + 0.5) * GRID_TILE_PX;
-    const y = (placement.row + 0.5) * GRID_TILE_PX;
+    const y = (placement.row + TILE_GROUND_FRAC) * GRID_TILE_PX;
     this.teamColor = placement.team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR;
 
     const shadow = scene.add.ellipse(
       0,
-      SHADOW_Y,
-      GRID_TILE_PX * 0.6,
-      GRID_TILE_PX * 0.22,
+      0,
+      SHADOW_RADIUS_X,
+      SHADOW_RADIUS_Y,
       TOKEN_SHADOW_COLOR,
       TOKEN_SHADOW_ALPHA,
     );
     this.ring = scene.add.graphics();
     this.sprite = scene.add
-      .sprite(0, RING_Y, animTextureKey(characterKey, 'idle'))
-      .setOrigin(0.5, SPRITE_ORIGIN_Y)
+      .sprite(0, 0, animTextureKey(characterKey, 'idle'))
+      .setOrigin(0.5, CHARACTER_FEET_FRAC)
       .setScale(SPRITE_SCALE);
     this.playIdle();
 
@@ -101,7 +114,7 @@ export class TokenView {
   private drawRing(active: boolean): void {
     this.ring.clear();
     this.ring.lineStyle(active ? 4 : 2, active ? ACTIVE_RING_COLOR : this.teamColor, active ? 1 : 0.75);
-    this.ring.strokeEllipse(0, RING_Y, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
+    this.ring.strokeEllipse(0, 0, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
   }
 
   // Declarative: reflect the engine state at the cursor.

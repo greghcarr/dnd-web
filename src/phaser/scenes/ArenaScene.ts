@@ -14,6 +14,7 @@ import {
 } from '@/phaser/assets/asset-keys';
 import {
   GRID_TILE_PX,
+  TILE_GROUND_FRAC,
   FENCE_MARGIN_TILES,
   ARENA_GROUND_PAD_TILES,
   PROP_CLEAR_TILES,
@@ -127,7 +128,7 @@ export class ArenaScene extends Phaser.Scene {
         if (rng() * 100 >= PROP_DENSITY_PCT) continue;
         const spec = pool[Math.floor(rng() * pool.length)]!;
         const x = (col + 0.5) * GRID_TILE_PX + (rng() - 0.5) * PROP_OFFSET_X;
-        const y = (row + 1) * GRID_TILE_PX + (rng() - 0.5) * PROP_OFFSET_Y;
+        const y = (row + TILE_GROUND_FRAC) * GRID_TILE_PX + (rng() - 0.5) * PROP_OFFSET_Y;
         const prop = this.add.image(x, y, spec.key).setOrigin(0.5, 1);
         prop.setScale((spec.heightTiles * GRID_TILE_PX) / prop.height);
         if (rng() < 0.5) prop.setFlipX(true);
