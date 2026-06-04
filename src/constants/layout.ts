@@ -16,6 +16,9 @@ export const COMBATANT_SPACING_TILES = 1;
 export const RANK_DEPTH_SPACING_TILES = 1;
 export const NO_MANS_LAND_TILES = 6;
 
+// Percentage of ground cells that receive a sparse bush/foliage overlay.
+export const DECOR_DENSITY_PCT = 16;
+
 // Static camera framing.
 export const CAMERA_PADDING_TILES = 2;
 export const CAMERA_MIN_ZOOM = 0.5;

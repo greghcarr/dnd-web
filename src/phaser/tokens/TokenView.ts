@@ -6,7 +6,8 @@
 import Phaser from 'phaser';
 import type { Character } from 'dnd-srd-engine';
 import type { Placement } from '@/spatial/formation';
-import { GRID_TILE_PX } from '@/constants/layout';
+import { SIDE_FACING_ROW } from '@/phaser/assets/asset-keys';
+import { GRID_TILE_PX, CHARACTER_FRAME_PX } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
 import {
   TEAM_A_COLOR,
@@ -21,7 +22,6 @@ import {
   HP_BAR_LOW_THRESHOLD,
 } from '@/constants/colors';
 
-const IDLE_FRAME = 0;
 const SPRITE_SCALE = 1.4;
 const SPRITE_ORIGIN_Y = 0.82;
 const BAR_WIDTH = GRID_TILE_PX * 0.9;
@@ -56,11 +56,15 @@ export class TokenView {
       TOKEN_SHADOW_ALPHA,
     );
     this.ring = scene.add.graphics();
+    // The sheets store the left-facing pose in SIDE_FACING_ROW; mirror it
+    // for the right-facing team so the two sides face each other.
+    const framesPerRow = Math.max(1, Math.floor(scene.textures.get(spriteKey).source[0]!.width / CHARACTER_FRAME_PX));
+    const sideFrame = SIDE_FACING_ROW * framesPerRow;
     this.sprite = scene.add
-      .sprite(0, RING_Y, spriteKey, IDLE_FRAME)
+      .sprite(0, RING_Y, spriteKey, sideFrame)
       .setOrigin(0.5, SPRITE_ORIGIN_Y)
       .setScale(SPRITE_SCALE)
-      .setFlipX(placement.facing === 'left');
+      .setFlipX(placement.facing === 'right');
     const hpBg = scene.add.rectangle(0, BAR_Y, BAR_WIDTH, BAR_HEIGHT, HP_BAR_BG_COLOR).setOrigin(0.5, 0.5);
     this.hpFill = scene.add
       .rectangle(-BAR_WIDTH / 2, BAR_Y, BAR_WIDTH, BAR_HEIGHT, HP_BAR_FILL_COLOR)

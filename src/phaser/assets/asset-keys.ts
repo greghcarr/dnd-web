@@ -8,16 +8,24 @@ import { CHARACTER_FRAME_PX } from '@/constants/layout';
 
 export const CHARACTER_FRAME_SIZE = CHARACTER_FRAME_PX;
 
-// Ground tiles (256x256, scaled to one cell at display time). A few
-// variants give the floor some texture; ArenaScene picks one per cell
-// deterministically.
-export const GROUND_SOURCES: Readonly<Record<string, string>> = {
-  'ground-0': '/assets/tiles/tropical/land_1.png',
-  'ground-1': '/assets/tiles/tropical/land_2.png',
-  'ground-2': '/assets/tiles/tropical/land_3.png',
-  'ground-3': '/assets/tiles/tropical/land_4.png',
+// Direction rows in the 4-row idle sheets. Both the human and orc packs
+// place the left-facing pose in row 2, so the arena uses that row and
+// mirrors it for the right-facing team (see TokenView).
+export const SIDE_FACING_ROW = 2;
+
+// The one fully-opaque, seamlessly tileable grass tile; laid on every
+// cell so the floor is continuous. The other land tiles carry
+// transparency and are used only as sparse decor on top.
+export const GROUND_KEY = 'ground';
+export const GROUND_SOURCE = '/assets/tiles/tropical/land_1.png';
+
+// Bush / foliage overlays scattered sparsely on top of the ground.
+export const DECOR_SOURCES: Readonly<Record<string, string>> = {
+  'decor-0': '/assets/tiles/tropical/land_2.png',
+  'decor-1': '/assets/tiles/tropical/land_3.png',
+  'decor-2': '/assets/tiles/tropical/land_4.png',
 };
-export const GROUND_KEYS = Object.keys(GROUND_SOURCES);
+export const DECOR_KEYS = Object.keys(DECOR_SOURCES);
 
 // Character idle spritesheets (64x64 frames, 4 direction rows).
 export const CHARACTER_SHEET_SOURCES: Readonly<Record<string, string>> = {

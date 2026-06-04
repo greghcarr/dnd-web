@@ -3,8 +3,8 @@ import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import { TokenView } from '@/phaser/tokens/TokenView';
 import { frameFormation } from '@/phaser/camera';
-import { spriteKeyFor, GROUND_KEYS, type CharacterKind } from '@/phaser/assets/asset-keys';
-import { GRID_TILE_PX, CAMERA_PADDING_TILES } from '@/constants/layout';
+import { spriteKeyFor, GROUND_KEY, DECOR_KEYS, type CharacterKind } from '@/phaser/assets/asset-keys';
+import { GRID_TILE_PX, CAMERA_PADDING_TILES, DECOR_DENSITY_PCT } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
 import { GROUND_BASE_COLOR } from '@/constants/colors';
 
@@ -66,14 +66,29 @@ export class ArenaScene extends Phaser.Scene {
   private drawGround(session: Session): void {
     const { minCol, maxCol, minRow, maxRow } = session.formation.bounds;
     const pad = CAMERA_PADDING_TILES;
+    const occupied = new Set<string>();
+    for (const placement of session.formation.placements.values()) {
+      occupied.add(`${placement.col},${placement.row}`);
+    }
     for (let row = minRow - pad; row <= maxRow + pad; row++) {
       for (let col = minCol - pad; col <= maxCol + pad; col++) {
-        const key = GROUND_KEYS[groundIndex(col, row)]!;
-        const image = this.add
-          .image((col + 0.5) * GRID_TILE_PX, (row + 0.5) * GRID_TILE_PX, key)
+        const x = (col + 0.5) * GRID_TILE_PX;
+        const y = (row + 0.5) * GRID_TILE_PX;
+        const ground = this.add
+          .image(x, y, GROUND_KEY)
           .setDisplaySize(GRID_TILE_PX, GRID_TILE_PX)
           .setDepth(RENDER_DEPTH.GROUND);
-        this.groundImages.push(image);
+        this.groundImages.push(ground);
+
+        const hash = cellHash(col, row);
+        if (hash % 100 < DECOR_DENSITY_PCT && !occupied.has(`${col},${row}`)) {
+          const decorKey = DECOR_KEYS[(hash >> 8) % DECOR_KEYS.length]!;
+          const decor = this.add
+            .image(x, y, decorKey)
+            .setDisplaySize(GRID_TILE_PX, GRID_TILE_PX)
+            .setDepth(RENDER_DEPTH.TILE_DECOR);
+          this.groundImages.push(decor);
+        }
       }
     }
   }
@@ -92,6 +107,6 @@ export class ArenaScene extends Phaser.Scene {
   }
 }
 
-// Deterministic per-cell tile pick so the floor has variety without RNG.
-const groundIndex = (col: number, row: number): number =>
-  Math.abs((col * 73856093) ^ (row * 19349663)) % GROUND_KEYS.length;
+// Deterministic per-cell hash so decor placement is stable without RNG.
+const cellHash = (col: number, row: number): number =>
+  Math.abs((col * 73856093) ^ (row * 19349663));

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import {
-  GROUND_SOURCES,
+  GROUND_KEY,
+  GROUND_SOURCE,
+  DECOR_SOURCES,
   CHARACTER_SHEET_SOURCES,
   CHARACTER_FRAME_SIZE,
 } from '@/phaser/assets/asset-keys';
@@ -13,7 +15,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const [key, url] of Object.entries(GROUND_SOURCES)) {
+    this.load.image(GROUND_KEY, GROUND_SOURCE);
+    for (const [key, url] of Object.entries(DECOR_SOURCES)) {
       this.load.image(key, url);
     }
     for (const [key, url] of Object.entries(CHARACTER_SHEET_SOURCES)) {
