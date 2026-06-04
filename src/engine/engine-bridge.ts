@@ -60,6 +60,15 @@ export class EngineBridge {
     const fullCampaign = result.campaign;
     const totalEvents = fullCampaign.events.length;
 
+    // Open the replay just after the last combatant spawns, so the viewer
+    // sees the fully-populated arena before any actions, with the event
+    // log positioned accordingly.
+    let lastSpawn = -1;
+    for (let i = 0; i < fullCampaign.events.length; i++) {
+      if (fullCampaign.events[i]!.type === 'CharacterCreated') lastSpawn = i;
+    }
+    const openingCursor = lastSpawn + 1;
+
     // Pin the genesis (0) and end (totalEvents) anchors so they never
     // evict, then seed both so the pins actually hold.
     const scrubCache = createScrubCache([0, totalEvents]);
@@ -70,6 +79,7 @@ export class EngineBridge {
       seed: config.seed,
       fullCampaign,
       totalEvents,
+      openingCursor,
       encounterId: findEncounterId(fullCampaign),
       result,
       content: this.content,

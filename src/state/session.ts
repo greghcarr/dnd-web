@@ -12,6 +12,8 @@ export interface Session {
   readonly seed: number;
   readonly fullCampaign: Campaign;
   readonly totalEvents: number;
+  // Cursor to open the replay at: just after the last combatant spawns.
+  readonly openingCursor: number;
   readonly encounterId: string;
   readonly result: FuzzBattleResult;
   readonly content: ResolvedContent;

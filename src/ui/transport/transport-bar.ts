@@ -120,7 +120,14 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
   };
   window.addEventListener('keydown', onKey);
 
+  // A freshly loaded scenario must always appear paused, even if playback
+  // was running when the config changed.
+  let lastSession = latest.session;
   const unsubscribe = store.subscribe((snapshot: ReplaySnapshot) => {
+    if (snapshot.session !== lastSession) {
+      lastSession = snapshot.session;
+      stopPlay();
+    }
     latest = snapshot;
     render();
   });
