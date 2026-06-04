@@ -31,26 +31,26 @@ body {
   font-size: 14px;
 }
 
-/* Full-screen Phaser map, behind the DOM overlay. */
-#game-root {
+/* App layout. Fills the fixed viewport (inset:0 sidesteps iOS 100vh
+   quirks). Desktop: map | right column. Phones: map on top, panels below
+   (see the media query at the end). */
+#layout {
   position: fixed;
   inset: 0;
-  z-index: 0;
-}
-#game-root canvas {
-  display: block;
-}
-
-/* Overlay grid. The container ignores pointer events so map drags reach
-   Phaser; individual panels re-enable them. */
-#ui-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
   display: grid;
   grid-template-columns: 1fr var(--right-col);
   grid-template-rows: 100%;
-  pointer-events: none;
+}
+
+/* Map area: hosts the Phaser canvas; the badges overlay it. */
+#game-root {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  overflow: hidden;
+}
+#game-root canvas {
+  display: block;
 }
 
 .panel {
@@ -98,16 +98,16 @@ body {
   white-space: nowrap;
 }
 
-/* Right column. */
+/* Right column (becomes the bottom row on phones). */
 #right {
   grid-column: 2;
-  pointer-events: none;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 #config-bar {
@@ -146,21 +146,23 @@ body {
   padding: 0.4rem 0.6rem;
 }
 
-/* Status line, bottom of the right column. */
+/* Status line + version badge overlay the map corners. */
 #status-bar {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  max-width: calc(var(--right-col) - 16px);
+  right: 10px;
+  top: 8px;
+  max-width: 70%;
+  z-index: 2;
   pointer-events: none;
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--text-dim);
   text-align: right;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 #version-badge {
-  position: fixed;
+  position: absolute;
   left: 10px;
   bottom: 8px;
   z-index: 2;
@@ -168,6 +170,7 @@ body {
   font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--text-dim);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .inspector-meta {
@@ -323,4 +326,35 @@ body {
   font-size: 0.68rem;
   color: var(--text-dim);
   white-space: pre-wrap;
+}
+
+/* Phones / narrow screens: stack the map on top and the panels below,
+   instead of an unusable 384px side column. */
+@media (max-width: 720px) {
+  #layout {
+    grid-template-columns: 100%;
+    grid-template-rows: 42% 58%;
+  }
+  #right {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  /* Larger touch targets for the transport and config controls. */
+  #transport button {
+    min-width: 2.9rem;
+    padding: 0.55rem 0.5rem;
+    font-size: 1.15rem;
+  }
+  .config-grid {
+    gap: 0.45rem 0.6rem;
+  }
+  .config-grid input,
+  .config-grid select {
+    width: 5rem;
+    padding: 0.35rem;
+    font-size: 0.85rem;
+  }
+  #status-bar {
+    font-size: 0.66rem;
+  }
 }

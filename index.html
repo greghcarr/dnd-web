@@ -2,26 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>dnd-web</title>
   </head>
   <body>
-    <!-- Phaser renders the full-screen map here, behind the DOM overlay. -->
-    <div id="game-root"></div>
-
-    <!-- DOM overlay: a right-hand column with the config, transport,
-         narrator console, and event inspector. -->
-    <div id="ui-overlay">
+    <!-- Map + panel column side by side on desktop, stacked on phones. -->
+    <div id="layout">
+      <!-- Phaser renders into the map area; the badges overlay it. -->
+      <div id="game-root">
+        <div id="status-bar" role="status"></div>
+        <div id="version-badge"></div>
+      </div>
       <aside id="right">
         <section id="config-bar" class="panel"></section>
         <div id="transport" class="panel" aria-label="Playback controls"></div>
         <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
         <section id="event-inspector" class="panel" aria-label="Event log"></section>
       </aside>
-      <div id="status-bar" role="status"></div>
     </div>
-
-    <div id="version-badge"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

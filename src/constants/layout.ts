@@ -41,6 +41,5 @@ export const CAMERA_PADDING_TILES = 2;
 export const CAMERA_MIN_ZOOM = 0.5;
 export const CAMERA_MAX_ZOOM = 3.5;
 
-// DOM shell.
+// DOM shell: width of the right-hand panel column on desktop.
 export const RIGHT_COL_PX = 384;
-export const TRANSPORT_TOP_PX = 12;
