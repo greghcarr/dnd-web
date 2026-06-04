@@ -25,7 +25,7 @@ export class ReplayStore {
   private campaign: Campaign;
   private readonly listeners = new Set<ReplayListener>();
 
-  constructor(session: Session, initialCursor: number = session.totalEvents) {
+  constructor(session: Session, initialCursor = 0) {
     this.session = session;
     this.cursor = clamp(initialCursor, 0, session.totalEvents);
     this.campaign = buildScrubbed(session.fullCampaign, this.cursor, session.scrubCache);
@@ -59,8 +59,9 @@ export class ReplayStore {
   }
 
   // Swap in a freshly generated battle (config change / new seed) and
-  // reset the cursor (defaults to the end so the outcome is visible).
-  loadSession(session: Session, cursor: number = session.totalEvents): void {
+  // reset the cursor to the beginning so the fight plays out from the
+  // start.
+  loadSession(session: Session, cursor = 0): void {
     this.session = session;
     this.cursor = clamp(cursor, 0, session.totalEvents);
     this.campaign = buildScrubbed(session.fullCampaign, this.cursor, session.scrubCache);
