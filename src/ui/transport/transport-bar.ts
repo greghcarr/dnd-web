@@ -41,8 +41,9 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
 
   const render = (): void => {
     const { cursor, totalEvents } = latest;
-    btnFirst.disabled = cursor === 0;
-    btnPrev.disabled = cursor === 0;
+    const start = latest.session.openingCursor;
+    btnFirst.disabled = cursor <= start;
+    btnPrev.disabled = cursor <= start;
     btnNext.disabled = cursor >= totalEvents;
     btnLast.disabled = cursor >= totalEvents;
     cursorEl.textContent = `step ${cursor} / ${totalEvents}`;
@@ -54,7 +55,7 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
 
   btnFirst.addEventListener('pointerdown', () => {
     stopPlay();
-    store.seek(0);
+    store.seek(latest.session.openingCursor);
   });
   btnPrev.addEventListener('pointerdown', () => {
     stopPlay();
@@ -104,7 +105,7 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
         break;
       case 'Home':
         stopPlay();
-        store.seek(0);
+        store.seek(latest.session.openingCursor);
         break;
       case 'End':
         stopPlay();

@@ -27,7 +27,7 @@ export class ReplayStore {
 
   constructor(session: Session, initialCursor: number = session.openingCursor) {
     this.session = session;
-    this.cursor = clamp(initialCursor, 0, session.totalEvents);
+    this.cursor = clamp(initialCursor, session.openingCursor, session.totalEvents);
     this.campaign = buildScrubbed(session.fullCampaign, this.cursor, session.scrubCache);
   }
 
@@ -51,7 +51,9 @@ export class ReplayStore {
   }
 
   seek(nextCursor: number): void {
-    const next = clamp(nextCursor, 0, this.session.totalEvents);
+    // The spawn frame (openingCursor) is the effective start; the
+    // pre-spawn setup frames are not navigable.
+    const next = clamp(nextCursor, this.session.openingCursor, this.session.totalEvents);
     if (next === this.cursor) return;
     this.cursor = next;
     this.campaign = buildScrubbed(this.session.fullCampaign, next, this.session.scrubCache);
@@ -63,7 +65,7 @@ export class ReplayStore {
   // paused, before any actions.
   loadSession(session: Session, cursor: number = session.openingCursor): void {
     this.session = session;
-    this.cursor = clamp(cursor, 0, session.totalEvents);
+    this.cursor = clamp(cursor, session.openingCursor, session.totalEvents);
     this.campaign = buildScrubbed(session.fullCampaign, this.cursor, session.scrubCache);
     this.emit();
   }
