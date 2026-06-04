@@ -61,6 +61,22 @@ const ORC_KEY_PREFIX = 'char-orc';
 export const getFacingRows = (characterKey: string): FacingRows =>
   characterKey.startsWith(ORC_KEY_PREFIX) ? ORC_FACING_ROWS : HUMAN_FACING_ROWS;
 
+// Idle strategy: rather than loop the full idle row (which turns the head
+// to the camera and blinks in sync), tokens hold a "looking ahead" rest
+// frame and only flash the blink frame occasionally on a per-token random
+// timer. `rest` and `blink` are frame indices WITHIN the directional row.
+// A pack with no usable blink frame (e.g. the 4-frame orc idle) just
+// holds its rest pose.
+export interface IdleConfig {
+  readonly rest: number;
+  readonly blink: ReadonlyArray<number>;
+}
+const HUMAN_IDLE: IdleConfig = { rest: 1, blink: [2] };
+const ORC_IDLE: IdleConfig = { rest: 0, blink: [] };
+
+export const idleConfig = (characterKey: string): IdleConfig =>
+  characterKey.startsWith(ORC_KEY_PREFIX) ? ORC_IDLE : HUMAN_IDLE;
+
 export const animTextureKey = (characterKey: string, anim: AnimType): string =>
   `${characterKey}-${anim}`;
 

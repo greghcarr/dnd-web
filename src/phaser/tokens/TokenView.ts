@@ -8,7 +8,7 @@
 import Phaser from 'phaser';
 import type { Character } from 'dnd-srd-engine';
 import type { Placement } from '@/spatial/formation';
-import { animTextureKey, animKey } from '@/phaser/assets/asset-keys';
+import { animTextureKey, animKey, getFacingRows, idleConfig } from '@/phaser/assets/asset-keys';
 import {
   GRID_TILE_PX,
   CHARACTER_FRAME_PX,
@@ -19,7 +19,14 @@ import {
   TOKEN_RECOIL_PX,
 } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
-import { HP_TWEEN_MS, HIT_FLASH_MS, TOKEN_LUNGE_MS } from '@/constants/timing';
+import {
+  HP_TWEEN_MS,
+  HIT_FLASH_MS,
+  TOKEN_LUNGE_MS,
+  BLINK_MIN_MS,
+  BLINK_MAX_MS,
+  BLINK_DURATION_MS,
+} from '@/constants/timing';
 import {
   TEAM_A_COLOR,
   TEAM_B_COLOR,
@@ -58,7 +65,12 @@ export class TokenView {
   private readonly characterKey: string;
   private readonly facing: 'left' | 'right';
   private readonly facingSign: number;
+  private readonly idleTexture: string;
+  private restFrame = 0;
+  private blinkFrame?: number;
+  private blinkTimer?: Phaser.Time.TimerEvent;
   private dead = false;
+  private destroyed = false;
 
   constructor(scene: Phaser.Scene, placement: Placement, characterKey: string, name: string) {
     this.scene = scene;
@@ -80,10 +92,21 @@ export class TokenView {
       TOKEN_SHADOW_ALPHA,
     );
     this.ring = scene.add.graphics();
+    this.idleTexture = animTextureKey(characterKey, 'idle');
     this.sprite = scene.add
-      .sprite(0, 0, animTextureKey(characterKey, 'idle'))
+      .sprite(0, 0, this.idleTexture)
       .setOrigin(0.5, CHARACTER_FEET_FRAC)
       .setScale(SPRITE_SCALE);
+
+    // Resolve the rest and blink frame numbers for this pack and facing.
+    const framesPerRow = Math.max(
+      1,
+      Math.floor(scene.textures.get(this.idleTexture).source[0]!.width / CHARACTER_FRAME_PX),
+    );
+    const rowBase = getFacingRows(characterKey)[this.facing] * framesPerRow;
+    const idle = idleConfig(characterKey);
+    this.restFrame = rowBase + idle.rest;
+    this.blinkFrame = idle.blink.length > 0 ? rowBase + idle.blink[0]! : undefined;
     this.playIdle();
 
     const hpBg = scene.add.rectangle(0, BAR_Y, BAR_WIDTH, BAR_HEIGHT, HP_BAR_BG_COLOR).setOrigin(0.5, 0.5);
@@ -106,9 +129,39 @@ export class TokenView {
     this.drawRing(false);
   }
 
+  // Idle = hold the "looking ahead" rest frame; blinks happen on their
+  // own randomized schedule so tokens never blink in unison.
   private playIdle(): void {
-    const key = animKey(this.characterKey, 'idle', this.facing);
-    if (this.sprite.anims.currentAnim?.key !== key) this.sprite.play(key);
+    this.sprite.anims.stop();
+    this.sprite.setTexture(this.idleTexture, this.restFrame);
+    this.scheduleBlink();
+  }
+
+  private scheduleBlink(): void {
+    this.cancelBlink();
+    if (this.dead || this.destroyed || this.blinkFrame === undefined) return;
+    const delay = BLINK_MIN_MS + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
+    this.blinkTimer = this.scene.time.delayedCall(delay, () => this.doBlink());
+  }
+
+  private doBlink(): void {
+    if (this.dead || this.destroyed || this.blinkFrame === undefined) return;
+    // Skip (but keep the schedule alive) if a transient animation is mid-play.
+    if (this.sprite.anims.isPlaying) {
+      this.scheduleBlink();
+      return;
+    }
+    this.sprite.setTexture(this.idleTexture, this.blinkFrame);
+    this.scene.time.delayedCall(BLINK_DURATION_MS, () => {
+      if (this.dead || this.destroyed) return;
+      if (!this.sprite.anims.isPlaying) this.sprite.setTexture(this.idleTexture, this.restFrame);
+      this.scheduleBlink();
+    });
+  }
+
+  private cancelBlink(): void {
+    this.blinkTimer?.remove();
+    this.blinkTimer = undefined;
   }
 
   private drawRing(active: boolean): void {
@@ -134,6 +187,7 @@ export class TokenView {
     const isDead = character.hp.current <= 0;
     if (isDead && !this.dead) {
       this.dead = true;
+      this.cancelBlink();
       this.sprite.clearTint();
       this.sprite.play(animKey(this.characterKey, 'death', this.facing));
     } else if (!isDead && this.dead) {
@@ -149,7 +203,8 @@ export class TokenView {
   // Transient: this combatant just attacked. Lunge toward the target and
   // play the attack animation, then settle back to idle.
   playAttack(): void {
-    if (this.dead) return;
+    if (this.dead || this.destroyed) return;
+    this.cancelBlink();
     const key = animKey(this.characterKey, 'attack', this.facing);
     this.sprite.play(key);
     this.scene.tweens.killTweensOf(this.sprite);
@@ -169,7 +224,8 @@ export class TokenView {
   // play the hurt animation, then settle back to idle (unless it died,
   // which setState handles).
   flashHit(): void {
-    if (this.dead) return;
+    if (this.dead || this.destroyed) return;
+    this.cancelBlink();
     const key = animKey(this.characterKey, 'hurt', this.facing);
     this.sprite.play(key);
     this.sprite.setTintFill(HIT_FLASH_COLOR);
@@ -190,6 +246,8 @@ export class TokenView {
   }
 
   destroy(): void {
+    this.destroyed = true;
+    this.cancelBlink();
     this.scene.tweens.killTweensOf([this.sprite, this.hpFill]);
     this.container.destroy();
   }

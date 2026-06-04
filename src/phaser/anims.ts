@@ -26,6 +26,9 @@ export const registerCharacterAnims = (scene: Phaser.Scene): void => {
   for (const characterKey of CHARACTER_KEYS) {
     const rows = getFacingRows(characterKey);
     for (const anim of ANIM_TYPES) {
+      // Idle is driven by static rest/blink frames (see TokenView), not a
+      // looping animation.
+      if (anim === 'idle') continue;
       const texture = animTextureKey(characterKey, anim);
       const framesPerRow = Math.max(
         1,
@@ -39,7 +42,7 @@ export const registerCharacterAnims = (scene: Phaser.Scene): void => {
           key,
           frames: scene.anims.generateFrameNumbers(texture, { start, end: start + framesPerRow - 1 }),
           frameRate: FRAME_RATES[anim],
-          repeat: anim === 'idle' ? -1 : 0,
+          repeat: 0,
         });
       }
     }
