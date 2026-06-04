@@ -50,7 +50,6 @@ export const mountConfigBar = (
         </select>
       </label>
     </div>
-    <button type="button" class="cfg-run">Run battle</button>
   `;
 
   const seedInput = root.querySelector<HTMLInputElement>('.cfg-seed');
@@ -58,8 +57,7 @@ export const mountConfigBar = (
   const vsSelect = root.querySelector<HTMLSelectElement>('.cfg-vs');
   const levelSelect = root.querySelector<HTMLSelectElement>('.cfg-level');
   const restSelect = root.querySelector<HTMLSelectElement>('.cfg-rest');
-  const runBtn = root.querySelector<HTMLButtonElement>('.cfg-run');
-  if (!seedInput || !modeSelect || !vsSelect || !levelSelect || !restSelect || !runBtn) {
+  if (!seedInput || !modeSelect || !vsSelect || !levelSelect || !restSelect) {
     throw new Error('config-bar: failed to mount template');
   }
 
@@ -85,16 +83,13 @@ export const mountConfigBar = (
   };
 
   // Reload the encounter the moment any value changes. Selects fire
-  // immediately; number inputs fire on commit (blur / Enter). The button
-  // stays as an explicit re-roll for the same parameters.
+  // immediately; the seed number input fires on commit (blur / Enter).
   const controls = [seedInput, modeSelect, vsSelect, levelSelect, restSelect];
   for (const control of controls) control.addEventListener('change', run);
-  runBtn.addEventListener('pointerdown', run);
 
   return {
     unmount: () => {
       for (const control of controls) control.removeEventListener('change', run);
-      runBtn.removeEventListener('pointerdown', run);
       root.replaceChildren();
     },
   };

@@ -9,12 +9,12 @@
     <!-- Phaser renders the full-screen map here, behind the DOM overlay. -->
     <div id="game-root"></div>
 
-    <!-- DOM overlay: transport bar (top-centre over the map) and the
-         right-hand column (config, narrator console, event inspector). -->
+    <!-- DOM overlay: a right-hand column with the config, transport,
+         narrator console, and event inspector. -->
     <div id="ui-overlay">
-      <div id="transport" class="panel" aria-label="Playback controls"></div>
       <aside id="right">
         <section id="config-bar" class="panel"></section>
+        <div id="transport" class="panel" aria-label="Playback controls"></div>
         <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
         <section id="event-inspector" class="panel" aria-label="Event log"></section>
       </aside>

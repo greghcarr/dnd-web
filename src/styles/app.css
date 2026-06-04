@@ -2,7 +2,6 @@
   /* Injected from src/constants/layout.ts at boot so TS stays the single
      source of truth; these are fallbacks. */
   --right-col: 384px;
-  --transport-top: 12px;
 
   --bg: #14161c;
   --panel-bg: rgba(22, 25, 33, 0.92);
@@ -62,14 +61,12 @@ body {
   backdrop-filter: blur(6px);
 }
 
-/* Transport bar: centred over the map column (the left grid track). */
+/* Transport bar: a row in the right column, just below the config bar. */
 #transport {
-  position: absolute;
-  top: var(--transport-top);
-  left: calc((100% - var(--right-col)) / 2);
-  transform: translateX(-50%);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.4rem 0.6rem;
 }
@@ -256,21 +253,6 @@ body {
   font-family: var(--mono);
   font-size: 0.78rem;
 }
-.cfg-run {
-  margin-top: 0.5rem;
-  width: 100%;
-  padding: 0.4rem;
-  color: #fff;
-  background: var(--accent);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-}
-.cfg-run:hover {
-  filter: brightness(1.08);
-}
-
 /* Event inspector */
 .show-earlier {
   width: 100%;

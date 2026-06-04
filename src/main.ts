@@ -7,7 +7,7 @@ import {
   DEFAULT_VS,
   DEFAULT_REST,
 } from '@/constants/app';
-import { RIGHT_COL_PX, TRANSPORT_TOP_PX } from '@/constants/layout';
+import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore, type ReplaySnapshot } from '@/engine/replay-store';
 import { createGame } from '@/phaser/game';
@@ -21,9 +21,7 @@ import { mountNarratorConsole } from '@/ui/console/narrator-console';
 // event inspector, config) against the store.
 
 const applyLayoutVars = (): void => {
-  const root = document.documentElement;
-  root.style.setProperty('--right-col', `${RIGHT_COL_PX}px`);
-  root.style.setProperty('--transport-top', `${TRANSPORT_TOP_PX}px`);
+  document.documentElement.style.setProperty('--right-col', `${RIGHT_COL_PX}px`);
 };
 
 const setVersionBadge = (): void => {
