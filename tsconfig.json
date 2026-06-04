@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@/*": ["src/*"],
+      "dnd-srd-engine": ["../dnd-srd-engine/src/index.ts"],
+      "dnd-srd-engine/starter-pack": ["../dnd-srd-engine/src/starter-pack.ts"],
+      "@engine-fuzz": ["../dnd-srd-engine/scripts/combat-fuzz-core.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

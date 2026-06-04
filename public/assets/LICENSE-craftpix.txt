@@ -1,0 +1,8 @@
+Character and tileset art by CraftPix.net (Free License).
+https://craftpix.net/file-licenses/
+Packs used:
+- Free Tropical Medieval City 2D Tileset (craftpix-988114)
+- Free 2D RPG Desert Tileset (craftpix-891121)
+- Free Base 4-Direction Male Character Pixel Art
+- Free Base 4-Direction Female Character Pixel Art
+- Free Top-Down Orc Game Character Pixel Art

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>dnd-web</title>
+  </head>
+  <body>
+    <!-- Phaser renders the full-screen map here, behind the DOM overlay. -->
+    <div id="game-root"></div>
+
+    <!-- DOM overlay: transport bar (top-centre over the map) and the
+         right-hand column (config, narrator console, event inspector). -->
+    <div id="ui-overlay">
+      <div id="transport" class="panel" aria-label="Playback controls"></div>
+      <aside id="right">
+        <section id="config-bar" class="panel"></section>
+        <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
+        <section id="event-inspector" class="panel" aria-label="Event log"></section>
+      </aside>
+      <div id="status-bar" role="status"></div>
+    </div>
+
+    <div id="version-badge"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
