@@ -9,7 +9,7 @@ import {
 } from '@/constants/app';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
-import { ReplayStore, type ReplaySnapshot } from '@/engine/replay-store';
+import { ReplayStore } from '@/engine/replay-store';
 import { createGame } from '@/phaser/game';
 import { mountTransportBar } from '@/ui/transport/transport-bar';
 import { mountEventInspector } from '@/ui/inspector/event-inspector';
@@ -27,11 +27,6 @@ const applyLayoutVars = (): void => {
 const setVersionBadge = (): void => {
   const badge = document.getElementById('version-badge');
   if (badge) badge.textContent = `dnd-web v${APP_VERSION}`;
-};
-
-const setStatus = (text: string): void => {
-  const el = document.getElementById('status-bar');
-  if (el) el.textContent = text;
 };
 
 const requireElement = (id: string): HTMLElement => {
@@ -53,35 +48,19 @@ const boot = (): void => {
   setVersionBadge();
 
   const bridge = new EngineBridge();
-  let config: BattleConfig = { ...DEFAULT_CONFIG };
+  const config: BattleConfig = { ...DEFAULT_CONFIG };
   const store = new ReplayStore(bridge.startBattle(config));
 
   createGame('game-root', store);
-
-  const updateStatus = (snapshot: ReplaySnapshot): void => {
-    const { session, campaign, cursor, totalEvents } = snapshot;
-    const encounter = campaign.state.encounters[session.encounterId];
-    const round = encounter?.round ?? '-';
-    const winnerName =
-      session.result.winner !== null
-        ? session.fullCampaign.state.characters[session.result.winner]?.name ?? '(unknown)'
-        : null;
-    const outcome =
-      cursor < totalEvents ? 'in progress' : winnerName !== null ? `winner ${winnerName}` : 'draw';
-    setStatus(`seed ${config.seed} · round ${round} · step ${cursor}/${totalEvents} · ${outcome}`);
-  };
 
   mountTransportBar(requireElement('transport'), store);
   mountNarratorConsole(requireElement('narrator-console'), store);
   mountEventInspector(requireElement('event-inspector'), store);
 
   const runBattle = (next: BattleConfig): void => {
-    config = next;
     store.loadSession(bridge.startBattle(next));
   };
   mountConfigBar(requireElement('config-bar'), config, runBattle);
-
-  store.subscribe(updateStatus);
 };
 
 boot();

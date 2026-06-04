@@ -146,21 +146,7 @@ body {
   padding: 0.4rem 0.6rem;
 }
 
-/* Status line + version badge overlay the map corners. */
-#status-bar {
-  position: absolute;
-  right: 10px;
-  top: 8px;
-  max-width: 70%;
-  z-index: 2;
-  pointer-events: none;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-  text-align: right;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
+/* Version badge overlays the map's bottom-left corner. */
 #version-badge {
   position: absolute;
   left: 10px;
@@ -353,8 +339,5 @@ body {
     width: 5rem;
     padding: 0.35rem;
     font-size: 0.85rem;
-  }
-  #status-bar {
-    font-size: 0.66rem;
   }
 }
