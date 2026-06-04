@@ -15,6 +15,7 @@ import { ReplayStore, type ReplaySnapshot } from '@/engine/replay-store';
 import { mountTransportBar } from '@/ui/transport/transport-bar';
 import { mountEventInspector } from '@/ui/inspector/event-inspector';
 import { mountConfigBar } from '@/ui/inspector/config-bar';
+import { mountNarratorConsole } from '@/ui/console/narrator-console';
 
 // Composition root. Owns the engine bridge + replay store and mounts the
 // DOM panels (transport, inspector, config) against the store. The arena
@@ -104,6 +105,7 @@ const boot = (): void => {
   };
 
   mountTransportBar(requireElement('transport'), store);
+  mountNarratorConsole(requireElement('narrator-console'), store);
   mountEventInspector(requireElement('event-inspector'), store);
 
   const runBattle = (next: BattleConfig): void => {

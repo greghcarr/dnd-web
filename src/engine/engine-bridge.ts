@@ -9,6 +9,7 @@ import {
   type FuzzRestKind,
 } from '@/constants/app';
 import type { Session } from '@/state/session';
+import { narrate } from '@/narrator';
 import { createScrubCache, buildScrubbed } from './scrub-cache';
 import { findEncounterId } from './encounter-select';
 
@@ -71,6 +72,7 @@ export class EngineBridge {
       result,
       content: this.content,
       scrubCache,
+      narration: narrate(fullCampaign.events, this.content),
     };
   }
 }
