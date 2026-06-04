@@ -1,5 +1,4 @@
 import './styles/app.css';
-import Phaser from 'phaser';
 import {
   APP_VERSION,
   DEFAULT_SEED,
@@ -9,17 +8,17 @@ import {
   DEFAULT_REST,
 } from '@/constants/app';
 import { RIGHT_COL_PX, TRANSPORT_TOP_PX } from '@/constants/layout';
-import { GROUND_BASE_COLOR, cssHex } from '@/constants/colors';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore, type ReplaySnapshot } from '@/engine/replay-store';
+import { createGame } from '@/phaser/game';
 import { mountTransportBar } from '@/ui/transport/transport-bar';
 import { mountEventInspector } from '@/ui/inspector/event-inspector';
 import { mountConfigBar } from '@/ui/inspector/config-bar';
 import { mountNarratorConsole } from '@/ui/console/narrator-console';
 
-// Composition root. Owns the engine bridge + replay store and mounts the
-// DOM panels (transport, inspector, config) against the store. The arena
-// scene and narrator console arrive in later phases.
+// Composition root. Owns the engine bridge + replay store, boots the
+// Phaser arena, and mounts the DOM panels (transport, narrator console,
+// event inspector, config) against the store.
 
 const applyLayoutVars = (): void => {
   const root = document.documentElement;
@@ -43,37 +42,6 @@ const requireElement = (id: string): HTMLElement => {
   return el;
 };
 
-class PlaceholderScene extends Phaser.Scene {
-  create(): void {
-    this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
-    const label = this.add.text(0, 0, 'dnd-web — arena pending', {
-      color: '#e6e8ee',
-      fontFamily: 'monospace',
-      fontSize: '20px',
-    });
-    label.setOrigin(0.5);
-    const centre = (): void => {
-      label.setPosition(this.scale.width / 2, this.scale.height / 2);
-    };
-    centre();
-    this.scale.on(Phaser.Scale.Events.RESIZE, centre);
-  }
-}
-
-const bootGame = (): Phaser.Game =>
-  new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: 'game-root',
-    backgroundColor: cssHex(GROUND_BASE_COLOR),
-    pixelArt: true,
-    scale: {
-      mode: Phaser.Scale.RESIZE,
-      width: '100%',
-      height: '100%',
-    },
-    scene: [PlaceholderScene],
-  });
-
 const DEFAULT_CONFIG: BattleConfig = {
   seed: DEFAULT_SEED,
   mode: DEFAULT_MODE,
@@ -85,11 +53,12 @@ const DEFAULT_CONFIG: BattleConfig = {
 const boot = (): void => {
   applyLayoutVars();
   setVersionBadge();
-  bootGame();
 
   const bridge = new EngineBridge();
   let config: BattleConfig = { ...DEFAULT_CONFIG };
   const store = new ReplayStore(bridge.startBattle(config));
+
+  createGame('game-root', store);
 
   const updateStatus = (snapshot: ReplaySnapshot): void => {
     const { session, campaign, cursor, totalEvents } = snapshot;
