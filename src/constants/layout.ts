@@ -23,10 +23,12 @@ export const ARENA_GROUND_PAD_TILES = 3;
 export const PROP_CLEAR_TILES = 1;
 export const PROP_DENSITY_PCT = 32;
 
-// Static camera framing (fence area plus a one-tile breath).
-export const CAMERA_PADDING_TILES = 1;
+// Static camera framing: the camera frames the combatants plus this many
+// tiles of surrounding arena, so the fight fills the screen while grass,
+// props, and the near fence still show around the edges.
+export const CAMERA_PADDING_TILES = 2;
 export const CAMERA_MIN_ZOOM = 0.5;
-export const CAMERA_MAX_ZOOM = 2;
+export const CAMERA_MAX_ZOOM = 3.5;
 
 // DOM shell.
 export const RIGHT_COL_PX = 384;

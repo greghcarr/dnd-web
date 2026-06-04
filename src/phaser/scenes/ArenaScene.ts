@@ -202,7 +202,8 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private reframe(): void {
-    if (this.fenceBounds) frameFormation(this.cameras.main, this.fenceBounds);
+    // Frame the combatants (not the whole fence) so they fill the screen.
+    if (this.currentSession) frameFormation(this.cameras.main, this.currentSession.formation.bounds);
   }
 }
 
