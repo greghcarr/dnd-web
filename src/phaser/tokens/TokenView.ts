@@ -46,9 +46,9 @@ const SPRITE_SCALE = 1.4;
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
 const HEAD_Y = -(CHARACTER_FEET_FRAC - CHARACTER_HEAD_FRAC) * DISPLAY_HEIGHT;
 const BAR_WIDTH = GRID_TILE_PX * 0.9;
-const BAR_HEIGHT = 5;
-const BAR_Y = HEAD_Y - 7;
-const NAME_Y = BAR_Y - 11;
+const BAR_HEIGHT = 8;
+const BAR_Y = HEAD_Y - 8;
+const NAME_Y = BAR_Y - 12;
 const RING_RADIUS_X = GRID_TILE_PX * 0.42;
 const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
 const SHADOW_RADIUS_X = GRID_TILE_PX * 0.6;
@@ -60,6 +60,7 @@ export class TokenView {
   private readonly sprite: Phaser.GameObjects.Sprite;
   private readonly ring: Phaser.GameObjects.Graphics;
   private readonly hpFill: Phaser.GameObjects.Rectangle;
+  private readonly hpText: Phaser.GameObjects.Text;
   private readonly nameText: Phaser.GameObjects.Text;
   private readonly teamColor: number;
   private readonly characterKey: string;
@@ -113,6 +114,15 @@ export class TokenView {
     this.hpFill = scene.add
       .rectangle(-BAR_WIDTH / 2, BAR_Y, BAR_WIDTH, BAR_HEIGHT, HP_BAR_FILL_COLOR)
       .setOrigin(0, 0.5);
+    this.hpText = scene.add
+      .text(0, BAR_Y, '', {
+        fontFamily: 'monospace',
+        fontSize: '9px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5, 0.5);
     this.nameText = scene.add
       .text(0, NAME_Y, name, { fontFamily: 'monospace', fontSize: '11px', color: '#e6e8ee' })
       .setOrigin(0.5, 1);
@@ -123,6 +133,7 @@ export class TokenView {
       this.sprite,
       hpBg,
       this.hpFill,
+      this.hpText,
       this.nameText,
     ]);
     this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
@@ -183,6 +194,7 @@ export class TokenView {
     this.scene.tweens.killTweensOf(this.hpFill);
     this.scene.tweens.add({ targets: this.hpFill, scaleX: frac, duration: HP_TWEEN_MS, ease: 'Quad.easeOut' });
     this.hpFill.setFillStyle(frac <= HP_BAR_LOW_THRESHOLD ? HP_BAR_LOW_COLOR : HP_BAR_FILL_COLOR);
+    this.hpText.setText(`${Math.max(0, character.hp.current)}/${character.hp.max}`);
 
     const isDead = character.hp.current <= 0;
     if (isDead && !this.dead) {
