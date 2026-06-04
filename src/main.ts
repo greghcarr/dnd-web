@@ -11,11 +11,14 @@ import {
 import { RIGHT_COL_PX, TRANSPORT_TOP_PX } from '@/constants/layout';
 import { GROUND_BASE_COLOR, cssHex } from '@/constants/colors';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
-import { ReplayStore } from '@/engine/replay-store';
+import { ReplayStore, type ReplaySnapshot } from '@/engine/replay-store';
+import { mountTransportBar } from '@/ui/transport/transport-bar';
+import { mountEventInspector } from '@/ui/inspector/event-inspector';
+import { mountConfigBar } from '@/ui/inspector/config-bar';
 
-// Composition root. Phase 1 stands up the engine bridge + replay store
-// and reports the loaded battle in the status line; later phases mount
-// the DOM panels and the arena scene against the store.
+// Composition root. Owns the engine bridge + replay store and mounts the
+// DOM panels (transport, inspector, config) against the store. The arena
+// scene and narrator console arrive in later phases.
 
 const applyLayoutVars = (): void => {
   const root = document.documentElement;
@@ -31,6 +34,12 @@ const setVersionBadge = (): void => {
 const setStatus = (text: string): void => {
   const el = document.getElementById('status-bar');
   if (el) el.textContent = text;
+};
+
+const requireElement = (id: string): HTMLElement => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`missing #${id} in index.html`);
+  return el;
 };
 
 class PlaceholderScene extends Phaser.Scene {
@@ -78,19 +87,32 @@ const boot = (): void => {
   bootGame();
 
   const bridge = new EngineBridge();
-  const session = bridge.startBattle(DEFAULT_CONFIG);
-  const store = new ReplayStore(session);
-  const snapshot = store.getSnapshot();
+  let config: BattleConfig = { ...DEFAULT_CONFIG };
+  const store = new ReplayStore(bridge.startBattle(config));
 
-  const winnerName =
-    session.result.winner !== null
-      ? session.fullCampaign.state.characters[session.result.winner]?.name ?? '(unknown)'
-      : '(draw)';
+  const updateStatus = (snapshot: ReplaySnapshot): void => {
+    const { session, campaign, cursor, totalEvents } = snapshot;
+    const encounter = campaign.state.encounters[session.encounterId];
+    const round = encounter?.round ?? '-';
+    const winnerName =
+      session.result.winner !== null
+        ? session.fullCampaign.state.characters[session.result.winner]?.name ?? '(unknown)'
+        : null;
+    const outcome =
+      cursor < totalEvents ? 'in progress' : winnerName !== null ? `winner ${winnerName}` : 'draw';
+    setStatus(`seed ${config.seed} · round ${round} · step ${cursor}/${totalEvents} · ${outcome}`);
+  };
 
-  setStatus(
-    `seed ${DEFAULT_CONFIG.seed} · ${snapshot.totalEvents} events · ` +
-      `${session.result.rounds} rounds · winner ${winnerName} · cursor ${snapshot.cursor}`,
-  );
+  mountTransportBar(requireElement('transport'), store);
+  mountEventInspector(requireElement('event-inspector'), store);
+
+  const runBattle = (next: BattleConfig): void => {
+    config = next;
+    store.loadSession(bridge.startBattle(next));
+  };
+  mountConfigBar(requireElement('config-bar'), config, runBattle);
+
+  store.subscribe(updateStatus);
 };
 
 boot();
