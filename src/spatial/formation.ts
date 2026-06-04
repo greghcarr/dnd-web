@@ -1,16 +1,8 @@
 // Position synthesis. The engine's fuzz battles are positionless, so the
-// viewer places each team in static facing ranks on a tile grid. Pure
-// and deterministic: placement order comes from the seed-stable team id
-// arrays, no RNG. Team A sits on the left facing right; team B on the
-// right facing left. Members stack along the rank; teams larger than a
-// rank wrap into sub-ranks that grow away from no-man's-land.
-
-import {
-  MAX_COMBATANTS_PER_RANK,
-  COMBATANT_SPACING_TILES,
-  RANK_DEPTH_SPACING_TILES,
-  NO_MANS_LAND_TILES,
-} from '@/constants/layout';
+// viewer places the two teams in adjacent columns at the centre of the
+// arena: team A in column 0 facing right, team B in column 1 facing left.
+// 1v1 is two touching tiles; 2v2 is a 2x2 square. Pure and deterministic:
+// placement order comes from the seed-stable team id arrays, no RNG.
 
 export type Team = 'A' | 'B';
 export type Facing = 'left' | 'right';
@@ -34,27 +26,18 @@ export interface Formation {
   readonly bounds: FormationBounds;
 }
 
-const TEAM_A_FRONT_COL = 0;
-const TEAM_B_FRONT_COL = NO_MANS_LAND_TILES;
+const TEAM_A_COL = 0;
+const TEAM_B_COL = 1;
 
 const placeTeam = (
   ids: ReadonlyArray<string>,
   team: Team,
-  frontCol: number,
-  depthSign: -1 | 1,
+  col: number,
   facing: Facing,
   out: Map<string, Placement>,
 ): void => {
   ids.forEach((id, index) => {
-    const subRank = Math.floor(index / MAX_COMBATANTS_PER_RANK);
-    const slot = index % MAX_COMBATANTS_PER_RANK;
-    const membersInSubRank = Math.min(
-      ids.length - subRank * MAX_COMBATANTS_PER_RANK,
-      MAX_COMBATANTS_PER_RANK,
-    );
-    const row = (slot - Math.floor((membersInSubRank - 1) / 2)) * COMBATANT_SPACING_TILES;
-    const col = frontCol + depthSign * subRank * RANK_DEPTH_SPACING_TILES;
-    out.set(id, { col, row, team, facing });
+    out.set(id, { col, row: index, team, facing });
   });
 };
 
@@ -84,7 +67,7 @@ export const synthesizePositions = (
   teamBIds: ReadonlyArray<string>,
 ): Formation => {
   const placements = new Map<string, Placement>();
-  placeTeam(teamAIds, 'A', TEAM_A_FRONT_COL, -1, 'right', placements);
-  placeTeam(teamBIds, 'B', TEAM_B_FRONT_COL, 1, 'left', placements);
+  placeTeam(teamAIds, 'A', TEAM_A_COL, 'right', placements);
+  placeTeam(teamBIds, 'B', TEAM_B_COL, 'left', placements);
   return { placements, bounds: computeBounds(placements) };
 };

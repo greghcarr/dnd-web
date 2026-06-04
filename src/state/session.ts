@@ -9,6 +9,7 @@ import type { Formation } from '@/spatial/formation';
 // campaign at any cursor; panels and the arena read result/content/
 // encounterId/narration/formation.
 export interface Session {
+  readonly seed: number;
   readonly fullCampaign: Campaign;
   readonly totalEvents: number;
   readonly encounterId: string;

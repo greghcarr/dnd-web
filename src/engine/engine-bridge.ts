@@ -67,6 +67,7 @@ export class EngineBridge {
     buildScrubbed(fullCampaign, 0, scrubCache);
 
     return {
+      seed: config.seed,
       fullCampaign,
       totalEvents,
       encounterId: findEncounterId(fullCampaign),

@@ -72,17 +72,24 @@ export const mountConfigBar = (
     rest: restSelect.value as FuzzRestKind,
   });
 
-  const onRunClick = (): void => {
+  const run = (): void => {
     const config = readConfig();
     seedInput.value = String(config.seed);
     levelInput.value = String(config.level);
     onRun(config);
   };
-  runBtn.addEventListener('pointerdown', onRunClick);
+
+  // Reload the encounter the moment any value changes. Selects fire
+  // immediately; number inputs fire on commit (blur / Enter). The button
+  // stays as an explicit re-roll for the same parameters.
+  const controls = [seedInput, modeSelect, vsSelect, levelInput, restSelect];
+  for (const control of controls) control.addEventListener('change', run);
+  runBtn.addEventListener('pointerdown', run);
 
   return {
     unmount: () => {
-      runBtn.removeEventListener('pointerdown', onRunClick);
+      for (const control of controls) control.removeEventListener('change', run);
+      runBtn.removeEventListener('pointerdown', run);
       root.replaceChildren();
     },
   };

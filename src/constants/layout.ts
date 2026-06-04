@@ -10,17 +10,16 @@ export const TILE_DISPLAY_SCALE = GRID_TILE_PX / TILE_SOURCE_PX;
 export const CHARACTER_FRAME_PX = 64;
 export const CHARACTER_DIRECTION_COUNT = 4;
 
-// Facing-rank formation tunables (see spatial/formation.ts).
-export const MAX_COMBATANTS_PER_RANK = 5;
-export const COMBATANT_SPACING_TILES = 1;
-export const RANK_DEPTH_SPACING_TILES = 1;
-export const NO_MANS_LAND_TILES = 6;
+// The fenced battle area extends this many tiles beyond the combatants on
+// every side; ground grass extends further still so the fence sits in a
+// field. Props scatter inside the fence, away from the combatants.
+export const FENCE_MARGIN_TILES = 3;
+export const ARENA_GROUND_PAD_TILES = 3;
+export const PROP_CLEAR_TILES = 1;
+export const PROP_DENSITY_PCT = 32;
 
-// Percentage of ground cells that receive a sparse bush/foliage overlay.
-export const DECOR_DENSITY_PCT = 16;
-
-// Static camera framing.
-export const CAMERA_PADDING_TILES = 2;
+// Static camera framing (fence area plus a one-tile breath).
+export const CAMERA_PADDING_TILES = 1;
 export const CAMERA_MIN_ZOOM = 0.5;
 export const CAMERA_MAX_ZOOM = 2;
 
