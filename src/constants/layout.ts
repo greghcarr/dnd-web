@@ -10,6 +10,11 @@ export const TILE_DISPLAY_SCALE = GRID_TILE_PX / TILE_SOURCE_PX;
 export const CHARACTER_FRAME_PX = 64;
 export const CHARACTER_DIRECTION_COUNT = 4;
 
+// How far a token lunges toward its target when attacking, and recoils
+// when hit (pixels).
+export const TOKEN_LUNGE_PX = 12;
+export const TOKEN_RECOIL_PX = 6;
+
 // The fenced battle area extends this many tiles beyond the combatants on
 // every side; ground grass extends further still so the fence sits in a
 // field. Props scatter inside the fence, away from the combatants.

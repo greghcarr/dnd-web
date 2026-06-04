@@ -3,6 +3,7 @@ import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import type { FormationBounds } from '@/spatial/formation';
 import { TokenView } from '@/phaser/tokens/TokenView';
+import { registerCharacterAnims } from '@/phaser/anims';
 import { frameFormation } from '@/phaser/camera';
 import {
   spriteKeyFor,
@@ -45,6 +46,7 @@ export class ArenaScene extends Phaser.Scene {
   private scenery: Phaser.GameObjects.GameObject[] = [];
   private currentSession?: Session;
   private fenceBounds?: FormationBounds;
+  private prevCursor = 0;
   private unsubscribe?: () => void;
 
   constructor() {
@@ -53,6 +55,7 @@ export class ArenaScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
+    registerCharacterAnims(this);
     this.store = this.registry.get('store') as ReplayStore;
     this.scale.on(Phaser.Scale.Events.RESIZE, this.reframe, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -66,8 +69,16 @@ export class ArenaScene extends Phaser.Scene {
     if (snapshot.session !== this.currentSession) {
       this.currentSession = snapshot.session;
       this.buildForSession(snapshot.session);
+      this.prevCursor = snapshot.cursor;
+      this.setStates(snapshot);
+      return;
     }
-    this.updateTokens(snapshot);
+    const delta = snapshot.cursor - this.prevCursor;
+    this.prevCursor = snapshot.cursor;
+    this.setStates(snapshot);
+    // Only react with attack/hurt animations on a single forward step
+    // (play or step-forward); jumps and rewinds just settle to state.
+    if (delta === 1) this.reactToEvent(snapshot);
   }
 
   private buildForSession(session: Session): void {
@@ -169,12 +180,24 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  private updateTokens(snapshot: ReplaySnapshot): void {
+  private setStates(snapshot: ReplaySnapshot): void {
     const { campaign, session } = snapshot;
     const encounter = campaign.state.encounters[session.encounterId];
     const activeId = encounter?.combatants[encounter.activeIndex]?.combatantId;
     for (const [id, token] of this.tokens) {
-      token.update(campaign.state.characters[id], id === activeId);
+      token.setState(campaign.state.characters[id], id === activeId);
+    }
+  }
+
+  // The single event just crossed by a forward step drives a reaction:
+  // the attacker lunges, or the damaged combatant flashes.
+  private reactToEvent(snapshot: ReplaySnapshot): void {
+    const event = snapshot.session.fullCampaign.events[snapshot.cursor - 1];
+    if (!event) return;
+    if (event.type === 'AttackRolled') {
+      this.tokens.get(event.attackerId)?.playAttack();
+    } else if (event.type === 'DamageApplied') {
+      this.tokens.get(event.targetId)?.flashHit();
     }
   }
 

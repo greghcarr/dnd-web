@@ -68,7 +68,7 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
     stopPlay();
     store.seek(latest.totalEvents);
   });
-  btnPlay.addEventListener('pointerdown', () => {
+  const togglePlay = (): void => {
     if (playTimer !== undefined) {
       stopPlay();
       render();
@@ -84,7 +84,41 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
       store.seek(latest.cursor + 1);
     }, STEP_DELAY_MS);
     render();
-  });
+  };
+  btnPlay.addEventListener('pointerdown', togglePlay);
+
+  // Keyboard transport: arrows step, Home/End jump, Space plays/pauses.
+  // Ignored while typing in the config inputs.
+  const onKey = (event: KeyboardEvent): void => {
+    const target = event.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    switch (event.key) {
+      case 'ArrowLeft':
+        stopPlay();
+        store.seek(latest.cursor - 1);
+        break;
+      case 'ArrowRight':
+        stopPlay();
+        store.seek(latest.cursor + 1);
+        break;
+      case 'Home':
+        stopPlay();
+        store.seek(0);
+        break;
+      case 'End':
+        stopPlay();
+        store.seek(latest.totalEvents);
+        break;
+      case ' ':
+        togglePlay();
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  };
+  window.addEventListener('keydown', onKey);
 
   const unsubscribe = store.subscribe((snapshot: ReplaySnapshot) => {
     latest = snapshot;
@@ -94,6 +128,7 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
   return {
     unmount: () => {
       stopPlay();
+      window.removeEventListener('keydown', onKey);
       unsubscribe();
       root.replaceChildren();
     },

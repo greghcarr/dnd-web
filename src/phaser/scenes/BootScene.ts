@@ -3,12 +3,16 @@ import {
   GROUND_KEY,
   GROUND_SOURCE,
   PROP_SPECS,
-  CHARACTER_SHEET_SOURCES,
-  CHARACTER_FRAME_SIZE,
+  CHARACTER_KEYS,
+  ANIM_TYPES,
+  ANIM_SHEETS,
+  animTextureKey,
 } from '@/phaser/assets/asset-keys';
+import { CHARACTER_FRAME_PX } from '@/constants/layout';
 import { ArenaScene } from './ArenaScene';
 
-// Loads the tileset and character spritesheets, then starts the arena.
+// Loads the tileset, props, and every character animation sheet, then
+// starts the arena.
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
@@ -19,11 +23,13 @@ export class BootScene extends Phaser.Scene {
     for (const spec of PROP_SPECS) {
       this.load.image(spec.key, spec.src);
     }
-    for (const [key, url] of Object.entries(CHARACTER_SHEET_SOURCES)) {
-      this.load.spritesheet(key, url, {
-        frameWidth: CHARACTER_FRAME_SIZE,
-        frameHeight: CHARACTER_FRAME_SIZE,
-      });
+    for (const characterKey of CHARACTER_KEYS) {
+      for (const anim of ANIM_TYPES) {
+        this.load.spritesheet(animTextureKey(characterKey, anim), ANIM_SHEETS[characterKey][anim], {
+          frameWidth: CHARACTER_FRAME_PX,
+          frameHeight: CHARACTER_FRAME_PX,
+        });
+      }
     }
   }
 
