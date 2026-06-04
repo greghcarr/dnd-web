@@ -1,13 +1,21 @@
 import './styles/app.css';
 import Phaser from 'phaser';
-import { APP_VERSION } from '@/constants/app';
+import {
+  APP_VERSION,
+  DEFAULT_SEED,
+  DEFAULT_LEVEL,
+  DEFAULT_MODE,
+  DEFAULT_VS,
+  DEFAULT_REST,
+} from '@/constants/app';
 import { RIGHT_COL_PX, TRANSPORT_TOP_PX } from '@/constants/layout';
 import { GROUND_BASE_COLOR, cssHex } from '@/constants/colors';
+import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
+import { ReplayStore } from '@/engine/replay-store';
 
-// Phase 0 entry point: stand up the DOM shell + a full-screen Phaser
-// canvas to verify the toolchain (Vite + TypeScript + Phaser + the
-// engine-source alias). Later phases replace the placeholder scene with
-// the arena and wire the replay store into the DOM panels.
+// Composition root. Phase 1 stands up the engine bridge + replay store
+// and reports the loaded battle in the status line; later phases mount
+// the DOM panels and the arena scene against the store.
 
 const applyLayoutVars = (): void => {
   const root = document.documentElement;
@@ -18,6 +26,11 @@ const applyLayoutVars = (): void => {
 const setVersionBadge = (): void => {
   const badge = document.getElementById('version-badge');
   if (badge) badge.textContent = `dnd-web v${APP_VERSION}`;
+};
+
+const setStatus = (text: string): void => {
+  const el = document.getElementById('status-bar');
+  if (el) el.textContent = text;
 };
 
 class PlaceholderScene extends Phaser.Scene {
@@ -51,6 +64,33 @@ const bootGame = (): Phaser.Game =>
     scene: [PlaceholderScene],
   });
 
-applyLayoutVars();
-setVersionBadge();
-bootGame();
+const DEFAULT_CONFIG: BattleConfig = {
+  seed: DEFAULT_SEED,
+  mode: DEFAULT_MODE,
+  vs: DEFAULT_VS,
+  level: DEFAULT_LEVEL,
+  rest: DEFAULT_REST,
+};
+
+const boot = (): void => {
+  applyLayoutVars();
+  setVersionBadge();
+  bootGame();
+
+  const bridge = new EngineBridge();
+  const session = bridge.startBattle(DEFAULT_CONFIG);
+  const store = new ReplayStore(session);
+  const snapshot = store.getSnapshot();
+
+  const winnerName =
+    session.result.winner !== null
+      ? session.fullCampaign.state.characters[session.result.winner]?.name ?? '(unknown)'
+      : '(draw)';
+
+  setStatus(
+    `seed ${DEFAULT_CONFIG.seed} · ${snapshot.totalEvents} events · ` +
+      `${session.result.rounds} rounds · winner ${winnerName} · cursor ${snapshot.cursor}`,
+  );
+};
+
+boot();
