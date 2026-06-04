@@ -21,6 +21,9 @@ export const mountConfigBar = (
   initial: BattleConfig,
   onRun: (config: BattleConfig) => void,
 ): ConfigBar => {
+  const levelOptions = Array.from({ length: LEVEL_MAX - LEVEL_MIN + 1 }, (_, i) => LEVEL_MIN + i)
+    .map((n) => `<option value="${n}">${n}</option>`)
+    .join('');
   root.innerHTML = `
     <div class="config-grid">
       <label>Seed <input class="cfg-seed" type="number" min="0" step="1" /></label>
@@ -36,7 +39,9 @@ export const mountConfigBar = (
           <option value="monster">Monster</option>
         </select>
       </label>
-      <label>Level <input class="cfg-level" type="number" min="${LEVEL_MIN}" max="${LEVEL_MAX}" step="1" /></label>
+      <label>Level
+        <select class="cfg-level">${levelOptions}</select>
+      </label>
       <label>Rest
         <select class="cfg-rest">
           <option value="none">None</option>
@@ -51,38 +56,38 @@ export const mountConfigBar = (
   const seedInput = root.querySelector<HTMLInputElement>('.cfg-seed');
   const modeSelect = root.querySelector<HTMLSelectElement>('.cfg-mode');
   const vsSelect = root.querySelector<HTMLSelectElement>('.cfg-vs');
-  const levelInput = root.querySelector<HTMLInputElement>('.cfg-level');
+  const levelSelect = root.querySelector<HTMLSelectElement>('.cfg-level');
   const restSelect = root.querySelector<HTMLSelectElement>('.cfg-rest');
   const runBtn = root.querySelector<HTMLButtonElement>('.cfg-run');
-  if (!seedInput || !modeSelect || !vsSelect || !levelInput || !restSelect || !runBtn) {
+  if (!seedInput || !modeSelect || !vsSelect || !levelSelect || !restSelect || !runBtn) {
     throw new Error('config-bar: failed to mount template');
   }
 
   seedInput.value = String(initial.seed);
   modeSelect.value = initial.mode;
   vsSelect.value = initial.vs;
-  levelInput.value = String(initial.level);
+  levelSelect.value = String(initial.level);
   restSelect.value = initial.rest;
 
   const readConfig = (): BattleConfig => ({
     seed: parseIntOr(seedInput.value, initial.seed, 0, Number.MAX_SAFE_INTEGER),
     mode: modeSelect.value as FuzzMode,
     vs: vsSelect.value as FuzzVsKind,
-    level: parseIntOr(levelInput.value, initial.level, LEVEL_MIN, LEVEL_MAX),
+    level: parseIntOr(levelSelect.value, initial.level, LEVEL_MIN, LEVEL_MAX),
     rest: restSelect.value as FuzzRestKind,
   });
 
   const run = (): void => {
     const config = readConfig();
     seedInput.value = String(config.seed);
-    levelInput.value = String(config.level);
+    levelSelect.value = String(config.level);
     onRun(config);
   };
 
   // Reload the encounter the moment any value changes. Selects fire
   // immediately; number inputs fire on commit (blur / Enter). The button
   // stays as an explicit re-roll for the same parameters.
-  const controls = [seedInput, modeSelect, vsSelect, levelInput, restSelect];
+  const controls = [seedInput, modeSelect, vsSelect, levelSelect, restSelect];
   for (const control of controls) control.addEventListener('change', run);
   runBtn.addEventListener('pointerdown', run);
 
