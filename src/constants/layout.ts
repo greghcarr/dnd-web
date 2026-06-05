@@ -34,9 +34,9 @@ export const ARENA_GROUND_PAD_TILES = 3;
 export const PROP_CLEAR_TILES = 1;
 export const PROP_DENSITY_PCT = 32;
 
-// Debug: overlay the tile grid with gray lines. Temporary; set to false
-// (or remove) to hide it.
-export const SHOW_GRID = true;
+// Debug: overlay the tile grid with gray lines. Temporary; set to true
+// to show it.
+export const SHOW_GRID = false;
 
 // Static camera framing: the camera frames the combatants plus this many
 // tiles of surrounding arena, so the fight fills the screen while grass,
