@@ -6,7 +6,7 @@
 import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import type { NarrationLine } from '@/narrator/types';
-import { splitTaggedNames } from '@/narrator/resolve';
+import { splitNarration } from '@/narrator/resolve';
 import { classTextColor } from '@/constants/class-colors';
 import { collapseToggleHtml, makeCollapsible } from '@/ui/collapsible';
 
@@ -19,17 +19,22 @@ export interface NarratorConsole {
 const createRow = (line: NarrationLine): HTMLLIElement => {
   const li = document.createElement('li');
   li.className = `narration-row narration-${line.kind}`;
-  // Character-name runs carry a class id; render them in the class color
-  // (WoW-style), everything else as plain text. Built as DOM nodes (not
-  // innerHTML) so names are never interpreted as markup.
-  for (const segment of splitTaggedNames(line.text)) {
-    if (segment.classId === undefined) {
+  // Names render in their class color (WoW-style); salient values (spell
+  // name, damage, gained HP) render in the line's kind color via the
+  // .narration-value rule; everything else stays regular. Built as DOM
+  // nodes (not innerHTML) so text is never interpreted as markup.
+  for (const segment of splitNarration(line.text)) {
+    if (segment.role === 'plain') {
       li.appendChild(document.createTextNode(segment.text));
       continue;
     }
     const span = document.createElement('span');
-    span.className = 'narration-name';
-    span.style.color = classTextColor(segment.classId);
+    if (segment.role === 'name') {
+      span.className = 'narration-name';
+      span.style.color = classTextColor(segment.classId);
+    } else {
+      span.className = 'narration-value';
+    }
     span.textContent = segment.text;
     li.appendChild(span);
   }

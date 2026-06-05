@@ -238,12 +238,16 @@ body {
   margin: 0;
   padding: 0;
 }
+/* Connective text reads in the regular (dim) color; names and values are
+   colored per element / via --kind below, so verbs stay neutral. */
 .narration-row {
   padding: 0.18rem 0.2rem;
   line-height: 1.35;
   font-size: 0.82rem;
+  color: var(--text-dim);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
+/* Turn / battle-begin-end markers stay full-line headers. */
 .narration-turn {
   margin-top: 0.35rem;
   font-weight: 700;
@@ -254,37 +258,35 @@ body {
 .narration-name {
   font-weight: 600;
 }
-.narration-miss {
-  color: var(--text-dim);
+/* Salient values (spell name, damage, gained HP) take the line's kind
+   color; --kind is set per kind below. */
+.narration-value {
+  color: var(--kind, var(--text-dim));
 }
 .narration-hit {
-  color: #ffd9b0;
+  --kind: #ffd9b0;
 }
 .narration-damage {
-  color: #ffc0b0;
+  --kind: #ffc0b0;
 }
 .narration-heal {
-  color: #b6f0c0;
+  --kind: #b6f0c0;
 }
 .narration-spell {
-  color: #c9b6ff;
+  --kind: #c9b6ff;
 }
 .narration-save {
-  color: #bfe0ff;
+  --kind: #bfe0ff;
 }
 .narration-condition {
-  color: #ffe39a;
+  --kind: #ffe39a;
 }
 .narration-death {
-  font-weight: 600;
-  color: #ff8e7a;
+  --kind: #ff8e7a;
 }
 .narration-rest {
-  color: #9fd0d6;
+  --kind: #9fd0d6;
   font-style: italic;
-}
-.narration-info {
-  color: var(--text-dim);
 }
 
 /* Config bar */

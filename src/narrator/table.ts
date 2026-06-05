@@ -17,6 +17,7 @@ import {
   hpChangeLabel,
   ordinal,
   tagCharacterPhrase,
+  tagValue,
 } from './resolve';
 
 export interface NarrationContext {
@@ -104,40 +105,41 @@ export const formatEvent = (
       const caster = firstMention(before, content, e.characterId, mentioned);
       const slot = e.slotLevel === 0 ? '' : ` (${ordinal(e.slotLevel)}-level)`;
       const targets = joinNames(before, e.targetIds);
-      return { text: `${caster} casts ${spellName(content, e.spellId)}${slot} at ${targets}.`, kind: 'spell' };
+      return { text: `${caster} casts ${tagValue(spellName(content, e.spellId))}${slot} at ${targets}.`, kind: 'spell' };
     }
     case 'SaveRolled': {
       const who = firstMention(before, content, e.targetId, mentioned);
       const verdict = e.success ? 'success' : 'failure';
-      return { text: `${who} rolls a ${e.ability} save: ${e.total} vs DC ${e.dc}, ${verdict}.`, kind: 'save' };
+      return { text: `${who} rolls a ${e.ability} save: ${e.total} vs DC ${e.dc}, ${tagValue(verdict)}.`, kind: 'save' };
     }
     case 'AbilityCheckRolled': {
       const who = firstMention(before, content, e.characterId, mentioned);
       const label = e.skill ?? `${e.ability} check`;
-      const dc = e.dc !== undefined ? ` vs DC ${e.dc}, ${e.success === true ? 'success' : 'failure'}` : '';
-      return { text: `${who} makes a ${label} check: ${e.total}${dc}.`, kind: 'save' };
+      const outcome =
+        e.dc !== undefined ? ` vs DC ${e.dc}, ${tagValue(e.success === true ? 'success' : 'failure')}` : '';
+      return { text: `${who} makes a ${label} check: ${e.total}${outcome}.`, kind: 'save' };
     }
     case 'ConditionApplied': {
       const who = firstMention(before, content, e.targetId, mentioned);
       const level = e.level !== undefined ? ` (level ${e.level})` : '';
-      return { text: `${who} is now ${conditionName(content, e.conditionId)}${level}.`, kind: 'condition' };
+      return { text: `${who} is now ${tagValue(conditionName(content, e.conditionId))}${level}.`, kind: 'condition' };
     }
     case 'ConditionRemoved': {
       const who = firstMention(before, content, e.targetId, mentioned);
-      return { text: `${who} is no longer ${conditionName(content, e.conditionId)}.`, kind: 'condition' };
+      return { text: `${who} is no longer ${tagValue(conditionName(content, e.conditionId))}.`, kind: 'condition' };
     }
     case 'ExhaustionChanged': {
       const who = characterName(before, e.targetId);
-      return { text: `${who}'s exhaustion is now level ${e.toLevel}.`, kind: 'condition' };
+      return { text: `${who}'s exhaustion is now ${tagValue(`level ${e.toLevel}`)}.`, kind: 'condition' };
     }
     case 'Healed': {
       const who = firstMention(before, content, e.targetId, mentioned);
       const hp = hpChangeLabel(before.characters[e.targetId]?.hp.current, after.characters[e.targetId]?.hp.current);
-      return { text: `${who} is healed ${e.amount} HP.${hp}`, kind: 'heal' };
+      return { text: `${who} is healed ${tagValue(`${e.amount} HP`)}.${hp}`, kind: 'heal' };
     }
     case 'TempHPGranted': {
       const who = firstMention(before, content, e.targetId, mentioned);
-      return { text: `${who} gains ${e.amount} temporary HP.`, kind: 'heal' };
+      return { text: `${who} gains ${tagValue(`${e.amount} temporary HP`)}.`, kind: 'heal' };
     }
     case 'DamageApplied': {
       // Non-attack damage (spells, traps). Attack damage is collapsed
@@ -151,7 +153,7 @@ export const formatEvent = (
             ? ` from ${e.source}`
             : '';
       const hp = hpChangeLabel(before.characters[e.targetId]?.hp.current, after.characters[e.targetId]?.hp.current);
-      return { text: `${who} takes ${total} ${types} damage${source}.${hp}`, kind: 'damage' };
+      return { text: `${who} takes ${tagValue(`${total} ${types} damage`)}${source}.${hp}`, kind: 'damage' };
     }
     case 'CreatureDestroyed': {
       const who = characterName(before, e.targetId);
@@ -161,12 +163,12 @@ export const formatEvent = (
     case 'DeathSaveRolled': {
       const who = characterName(before, e.targetId);
       const verdict = e.critical ? 'critical success' : e.success ? 'success' : 'failure';
-      return { text: `${who} rolls a death save: ${verdict}.`, kind: 'death' };
+      return { text: `${who} rolls a death save: ${tagValue(verdict)}.`, kind: 'death' };
     }
     case 'Stabilized':
       return { text: `${characterName(before, e.targetId)} is stabilized.`, kind: 'death' };
     case 'ConcentrationStarted':
-      return { text: `${characterName(before, e.casterId)} begins concentrating on ${spellName(content, e.spellId)}.`, kind: 'spell' };
+      return { text: `${characterName(before, e.casterId)} begins concentrating on ${tagValue(spellName(content, e.spellId))}.`, kind: 'spell' };
     case 'ConcentrationBroken':
       return { text: `${characterName(before, e.casterId)} loses concentration (${e.reason}).`, kind: 'spell' };
     case 'Dashed':
@@ -179,7 +181,7 @@ export const formatEvent = (
       const who = firstMention(before, content, e.characterId, mentioned);
       const item = content.items.get(e.definitionId)?.name ?? e.definitionId;
       const onOther = e.targetId !== e.characterId ? ` on ${characterName(before, e.targetId)}` : '';
-      return { text: `${who} uses ${item}${onOther}.`, kind: 'heal' };
+      return { text: `${who} uses ${tagValue(item)}${onOther}.`, kind: 'heal' };
     }
     case 'ItemUsed': {
       const who = firstMention(before, content, e.characterId, mentioned);

@@ -15,6 +15,10 @@ import type { CampaignState, ResolvedContent } from 'dnd-srd-engine';
 const NAME_OPEN = String.fromCharCode(0xe000);
 const NAME_SEP = String.fromCharCode(0xe001);
 const NAME_CLOSE = String.fromCharCode(0xe002);
+// Field sentinel marking a "value" run (spell name, damage, gained HP):
+// the renderer colors these in the line's event-kind color rather than a
+// class color. Distinct from any class id, which are lowercase slugs.
+const VALUE_REF = String.fromCharCode(0xe003);
 const NAME_PATTERN = new RegExp(
   `${NAME_OPEN}([^${NAME_SEP}]*)${NAME_SEP}([^${NAME_CLOSE}]*)${NAME_CLOSE}`,
   'g',
@@ -22,6 +26,12 @@ const NAME_PATTERN = new RegExp(
 
 const tagName = (classId: string, text: string): string =>
   `${NAME_OPEN}${classId}${NAME_SEP}${text}${NAME_CLOSE}`;
+
+// Wrap a salient value (spell name, damage, gained HP) so the battle log
+// shows it in the line's kind color while verbs and connectives stay
+// regular.
+export const tagValue = (text: string): string =>
+  `${NAME_OPEN}${VALUE_REF}${NAME_SEP}${text}${NAME_CLOSE}`;
 
 const classOf = (state: CampaignState, id: string): string =>
   state.characters[id]?.classes[0]?.classId ?? '';
@@ -44,27 +54,30 @@ export const classSpeciesLabel = (
   return tagName(enrollment?.classId ?? '', label);
 };
 
-// A run of narration text: plain text, or a character-name run tagged with
-// the class id that drives its color. Plain runs leave classId undefined.
-export interface NarrationSegment {
-  readonly text: string;
-  readonly classId?: string;
-}
+// A renderable run of narration: plain connective text, a character name
+// (colored by class), or a salient value (colored by the line's kind).
+export type NarrationSegment =
+  | { readonly role: 'plain'; readonly text: string }
+  | { readonly role: 'name'; readonly text: string; readonly classId: string }
+  | { readonly role: 'value'; readonly text: string };
 
-// Split a tagged narration string into renderable segments. Name runs with
-// a non-empty class id become colored segments; empty-class names (e.g.
-// creatures) fold back into plain text.
-export const splitTaggedNames = (text: string): NarrationSegment[] => {
+// Split a tagged narration string into renderable segments. Value runs and
+// class-tagged names become their own segments; untagged text and
+// empty-class names (e.g. creatures) fold into plain runs.
+export const splitNarration = (text: string): NarrationSegment[] => {
   const segments: NarrationSegment[] = [];
   let last = 0;
   for (const match of text.matchAll(NAME_PATTERN)) {
     const start = match.index!;
-    if (start > last) segments.push({ text: text.slice(last, start) });
-    const classId = match[1] ?? '';
-    segments.push(classId ? { text: match[2]!, classId } : { text: match[2]! });
+    if (start > last) segments.push({ role: 'plain', text: text.slice(last, start) });
+    const field = match[1] ?? '';
+    const runText = match[2]!;
+    if (field === VALUE_REF) segments.push({ role: 'value', text: runText });
+    else if (field) segments.push({ role: 'name', text: runText, classId: field });
+    else segments.push({ role: 'plain', text: runText });
     last = start + match[0].length;
   }
-  if (last < text.length) segments.push({ text: text.slice(last) });
+  if (last < text.length) segments.push({ role: 'plain', text: text.slice(last) });
   return segments;
 };
 

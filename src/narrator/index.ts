@@ -14,6 +14,7 @@ import {
   summarizeDamage,
   hpChangeLabel,
   optionName,
+  tagValue,
 } from './resolve';
 import { formatEvent, isSilent } from './table';
 
@@ -97,7 +98,7 @@ export const narrate = (
       lines.push({
         eventIndex: j,
         attackEventIndex: i,
-        text: `${crit}${attacker} hits ${targetName} for ${total} ${types}${withWeapon}.${hp}`,
+        text: `${crit}${attacker} hits ${targetName} for ${tagValue(`${total} ${types}`)}${withWeapon}.${hp}`,
         kind: 'hit',
       });
       consumed.add(i);
