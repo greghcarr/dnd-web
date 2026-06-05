@@ -33,18 +33,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dnd-web
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: dnd-web
 
       - name: Checkout dnd-srd-engine (main)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: greghcarr/dnd-srd-engine
           ref: main
           path: dnd-srd-engine
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -66,11 +66,11 @@ jobs:
           BASE_PATH: /${{ github.event.repository.name }}/
         run: npm run build
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dnd-web/dist
 
@@ -82,4 +82,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
