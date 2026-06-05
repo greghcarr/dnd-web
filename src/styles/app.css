@@ -28,7 +28,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 14px;
+  /* Panel text is rem-based off this; the arena uses canvas px fonts and
+     is unaffected. */
+  font-size: 15.5px;
 }
 
 /* App layout. Fills the fixed viewport (inset:0 sidesteps iOS 100vh
