@@ -11,8 +11,6 @@ export const TEAM_B_COLOR = 0xe7553c;
 export const ACTIVE_RING_COLOR = 0xffd54a;
 export const DOWNED_TINT = 0x555555;
 
-export const TOKEN_SHADOW_COLOR = 0x000000;
-export const TOKEN_SHADOW_ALPHA = 0.3;
 
 export const HP_BAR_BG_COLOR = 0x202020;
 export const HP_BAR_FILL_COLOR = 0x46c84a;

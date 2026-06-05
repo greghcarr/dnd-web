@@ -31,8 +31,6 @@ import {
   TEAM_A_COLOR,
   TEAM_B_COLOR,
   ACTIVE_RING_COLOR,
-  TOKEN_SHADOW_COLOR,
-  TOKEN_SHADOW_ALPHA,
   HP_BAR_BG_COLOR,
   HP_BAR_FILL_COLOR,
   HP_BAR_LOW_COLOR,
@@ -52,8 +50,6 @@ const BAR_Y = HEAD_Y - 8;
 const NAME_Y = BAR_Y - 5;
 const RING_RADIUS_X = GRID_TILE_PX * 0.42;
 const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
-const SHADOW_RADIUS_X = GRID_TILE_PX * 0.6;
-const SHADOW_RADIUS_Y = GRID_TILE_PX * 0.22;
 
 export class TokenView {
   private readonly scene: Phaser.Scene;
@@ -79,20 +75,13 @@ export class TokenView {
     this.characterKey = characterKey;
     this.facing = placement.facing;
     this.facingSign = placement.facing === 'right' ? 1 : -1;
-    // Container origin = the tile's ground point. Feet, shadow, and ring
-    // all sit at (0, 0) so the character stands in its square.
+    // Container origin = the tile's ground point. Feet and ring sit at
+    // (0, 0) so the character stands in its square. The sprite art already
+    // carries its own baked-in shadow, so no extra shadow is drawn here.
     const x = (placement.col + 0.5) * GRID_TILE_PX;
     const y = (placement.row + TILE_GROUND_FRAC) * GRID_TILE_PX;
     this.teamColor = placement.team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR;
 
-    const shadow = scene.add.ellipse(
-      0,
-      0,
-      SHADOW_RADIUS_X,
-      SHADOW_RADIUS_Y,
-      TOKEN_SHADOW_COLOR,
-      TOKEN_SHADOW_ALPHA,
-    );
     this.ring = scene.add.graphics();
     this.idleTexture = animTextureKey(characterKey, 'idle');
     this.sprite = scene.add
@@ -136,7 +125,6 @@ export class TokenView {
       .setOrigin(0.5, 1);
 
     this.container = scene.add.container(x, y, [
-      shadow,
       this.ring,
       this.sprite,
       hpBg,
