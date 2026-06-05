@@ -3,6 +3,11 @@
 // (humans for PCs, orcs for monsters) and distinguishes teams with a
 // colored ring rather than per-class sprites.
 
+// Asset URLs must include Vite's base path (import.meta.env.BASE_URL) so
+// they resolve under a GitHub Pages project subpath (/<repo>/), not the
+// domain root. The paths below are relative (no leading slash).
+const asset = (path: string): string => `${import.meta.env.BASE_URL}${path}`;
+
 // --- Direction rows -------------------------------------------------------
 // The 4-row sheets order their directions differently per pack: the human
 // pack is down/left/right/up, the orc pack is down/up/left/right. Tokens
@@ -25,34 +30,34 @@ export type AnimType = (typeof ANIM_TYPES)[number];
 // rows). Texture keys are `${characterKey}-${animType}`.
 export const ANIM_SHEETS: Readonly<Record<CharacterKey, Readonly<Record<AnimType, string>>>> = {
   'char-male': {
-    idle: '/assets/characters/male/Sword_Idle_full.png',
-    attack: '/assets/characters/male/Sword_attack_full.png',
-    hurt: '/assets/characters/male/Sword_Hurt_full.png',
-    death: '/assets/characters/male/Sword_Death_full.png',
+    idle: asset('assets/characters/male/Sword_Idle_full.png'),
+    attack: asset('assets/characters/male/Sword_attack_full.png'),
+    hurt: asset('assets/characters/male/Sword_Hurt_full.png'),
+    death: asset('assets/characters/male/Sword_Death_full.png'),
   },
   'char-female': {
-    idle: '/assets/characters/female/Sword_Idle_full.png',
-    attack: '/assets/characters/female/Sword_attack_full.png',
-    hurt: '/assets/characters/female/Sword_Hurt_full.png',
-    death: '/assets/characters/female/Sword_Death_full.png',
+    idle: asset('assets/characters/female/Sword_Idle_full.png'),
+    attack: asset('assets/characters/female/Sword_attack_full.png'),
+    hurt: asset('assets/characters/female/Sword_Hurt_full.png'),
+    death: asset('assets/characters/female/Sword_Death_full.png'),
   },
   'char-orc1': {
-    idle: '/assets/characters/orc/orc1_idle_full.png',
-    attack: '/assets/characters/orc/orc1_attack_full.png',
-    hurt: '/assets/characters/orc/orc1_hurt_full.png',
-    death: '/assets/characters/orc/orc1_death_full.png',
+    idle: asset('assets/characters/orc/orc1_idle_full.png'),
+    attack: asset('assets/characters/orc/orc1_attack_full.png'),
+    hurt: asset('assets/characters/orc/orc1_hurt_full.png'),
+    death: asset('assets/characters/orc/orc1_death_full.png'),
   },
   'char-orc2': {
-    idle: '/assets/characters/orc/orc2_idle_full.png',
-    attack: '/assets/characters/orc/orc2_attack_full.png',
-    hurt: '/assets/characters/orc/orc2_hurt_full.png',
-    death: '/assets/characters/orc/orc2_death_full.png',
+    idle: asset('assets/characters/orc/orc2_idle_full.png'),
+    attack: asset('assets/characters/orc/orc2_attack_full.png'),
+    hurt: asset('assets/characters/orc/orc2_hurt_full.png'),
+    death: asset('assets/characters/orc/orc2_death_full.png'),
   },
   'char-orc3': {
-    idle: '/assets/characters/orc/orc3_idle_full.png',
-    attack: '/assets/characters/orc/orc3_attack_full.png',
-    hurt: '/assets/characters/orc/orc3_hurt_full.png',
-    death: '/assets/characters/orc/orc3_death_full.png',
+    idle: asset('assets/characters/orc/orc3_idle_full.png'),
+    attack: asset('assets/characters/orc/orc3_attack_full.png'),
+    hurt: asset('assets/characters/orc/orc3_hurt_full.png'),
+    death: asset('assets/characters/orc/orc3_death_full.png'),
   },
 };
 
@@ -95,7 +100,7 @@ export const spriteKeyFor = (kind: CharacterKind, index: number): CharacterKey =
 
 // --- Ground & props -------------------------------------------------------
 export const GROUND_KEY = 'ground';
-export const GROUND_SOURCE = '/assets/tiles/tropical/land_1.png';
+export const GROUND_SOURCE = asset('assets/tiles/tropical/land_1.png');
 
 export interface PropSpec {
   readonly key: string;
@@ -104,18 +109,18 @@ export interface PropSpec {
 }
 
 export const PROP_SPECS: ReadonlyArray<PropSpec> = [
-  { key: 'tree-1', src: '/assets/tiles/props/tree_1.png', heightTiles: 1.9 },
-  { key: 'tree-2', src: '/assets/tiles/props/tree_2.png', heightTiles: 1.8 },
-  { key: 'bush-1', src: '/assets/tiles/props/greenery_1.png', heightTiles: 0.9 },
-  { key: 'bush-2', src: '/assets/tiles/props/greenery_2.png', heightTiles: 0.8 },
-  { key: 'bush-3', src: '/assets/tiles/props/greenery_3.png', heightTiles: 0.8 },
-  { key: 'bush-4', src: '/assets/tiles/props/greenery_4.png', heightTiles: 0.7 },
-  { key: 'bush-5', src: '/assets/tiles/props/greenery_5.png', heightTiles: 0.7 },
-  { key: 'stone-1', src: '/assets/tiles/props/stones_1.png', heightTiles: 0.45 },
-  { key: 'stone-2', src: '/assets/tiles/props/stones_2.png', heightTiles: 0.4 },
-  { key: 'stone-3', src: '/assets/tiles/props/stones_3.png', heightTiles: 0.5 },
-  { key: 'stone-4', src: '/assets/tiles/props/stones_4.png', heightTiles: 0.4 },
-  { key: 'stone-5', src: '/assets/tiles/props/stones_5.png', heightTiles: 0.45 },
+  { key: 'tree-1', src: asset('assets/tiles/props/tree_1.png'), heightTiles: 1.9 },
+  { key: 'tree-2', src: asset('assets/tiles/props/tree_2.png'), heightTiles: 1.8 },
+  { key: 'bush-1', src: asset('assets/tiles/props/greenery_1.png'), heightTiles: 0.9 },
+  { key: 'bush-2', src: asset('assets/tiles/props/greenery_2.png'), heightTiles: 0.8 },
+  { key: 'bush-3', src: asset('assets/tiles/props/greenery_3.png'), heightTiles: 0.8 },
+  { key: 'bush-4', src: asset('assets/tiles/props/greenery_4.png'), heightTiles: 0.7 },
+  { key: 'bush-5', src: asset('assets/tiles/props/greenery_5.png'), heightTiles: 0.7 },
+  { key: 'stone-1', src: asset('assets/tiles/props/stones_1.png'), heightTiles: 0.45 },
+  { key: 'stone-2', src: asset('assets/tiles/props/stones_2.png'), heightTiles: 0.4 },
+  { key: 'stone-3', src: asset('assets/tiles/props/stones_3.png'), heightTiles: 0.5 },
+  { key: 'stone-4', src: asset('assets/tiles/props/stones_4.png'), heightTiles: 0.4 },
+  { key: 'stone-5', src: asset('assets/tiles/props/stones_5.png'), heightTiles: 0.45 },
 ];
 
 export const PROP_WEIGHTS: Readonly<Record<string, number>> = {
