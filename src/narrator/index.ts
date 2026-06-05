@@ -7,7 +7,14 @@
 
 import { apply, emptyCampaignState, type Event, type CampaignState, type ResolvedContent } from 'dnd-srd-engine';
 import type { NarrationLine } from './types';
-import { characterName, firstMention, weaponLabel, summarizeDamage, hpChangeLabel } from './resolve';
+import {
+  characterName,
+  firstMention,
+  weaponLabel,
+  summarizeDamage,
+  hpChangeLabel,
+  optionName,
+} from './resolve';
 import { formatEvent, isSilent } from './table';
 
 type DamageAppliedEvent = Extract<Event, { type: 'DamageApplied' }>;
@@ -97,6 +104,21 @@ export const narrate = (
       consumed.add(j);
       for (let k = i + 1; k < j; k++) {
         if (events[k]!.type === 'DamageRolled') consumed.add(k);
+      }
+      continue;
+    }
+
+    if (e.type === 'ChoiceResolved') {
+      // A subclass choice is reported by the following SubclassChosen line;
+      // skip the duplicate. Any other choice shows its resolved options.
+      const next = events[i + 1];
+      if (!(next?.type === 'SubclassChosen' && next.characterId === e.characterId)) {
+        const names = e.selectedOptionIds.map((id) => optionName(content, id)).join(', ');
+        lines.push({
+          eventIndex: i,
+          text: `${characterName(before[i]!, e.characterId)} chooses ${names}.`,
+          kind: 'info',
+        });
       }
       continue;
     }

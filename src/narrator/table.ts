@@ -58,9 +58,9 @@ const SILENT = new Set<string>([
   'SteadyAimConsumed',
   'WeaponMasteryActivated',
   'HeroPointGranted',
-  // Internal level-up mechanics; LevelUpResolved carries the readable line.
+  // The choice prompt is noise; ChoiceResolved (handled in narrate) and
+  // SubclassChosen carry the readable detail.
   'ChoiceRequired',
-  'ChoiceResolved',
 ]);
 
 export const isSilent = (type: string): boolean => SILENT.has(type);
@@ -83,7 +83,9 @@ export const formatEvent = (
       if (c.kind === 'creature' || c.kind === 'npc') {
         return { text: `${c.name} appears (${c.hp.current}/${c.hp.max} HP).`, kind: 'info' };
       }
-      const cls = c.classes.map((x) => `${content.classes.get(x.classId)?.name ?? x.classId} ${x.level}`).join(' / ');
+      const cls = c.classes
+        .map((x) => `Level ${x.level} ${content.classes.get(x.classId)?.name ?? x.classId}`)
+        .join(' / ');
       return { text: `${c.name} the ${cls} enters the arena (${c.hp.current}/${c.hp.max} HP).`, kind: 'info' };
     }
     case 'EncounterStarted':
@@ -193,6 +195,11 @@ export const formatEvent = (
       const who = characterName(before, e.characterId);
       const className = content.classes.get(e.classId)?.name ?? e.classId;
       return { text: `${who} reaches ${className} level ${e.newClassLevel}.`, kind: 'info' };
+    }
+    case 'SubclassChosen': {
+      const who = characterName(before, e.characterId);
+      const subclass = content.subclasses.get(e.subclassId)?.name ?? e.subclassId;
+      return { text: `${who} chooses the ${subclass} subclass.`, kind: 'info' };
     }
     default:
       return { text: `${humanLabel(e.type)}.`, kind: 'info' };

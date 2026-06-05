@@ -63,6 +63,20 @@ export const spellName = (content: ResolvedContent, id: string): string =>
 export const conditionName = (content: ResolvedContent, id: string): string =>
   content.conditions.get(id)?.name ?? id;
 
+const titleizeSlug = (slug: string): string =>
+  slug
+    .split('-')
+    .map((part) => (part.length > 0 ? part[0]!.toUpperCase() + part.slice(1) : part))
+    .join(' ');
+
+// Resolve a choice option id (subclass / feat / spell / ...) to a readable
+// name, falling back to a title-cased slug.
+export const optionName = (content: ResolvedContent, id: string): string =>
+  content.subclasses.get(id)?.name ??
+  content.feats.get(id)?.name ??
+  content.spells.get(id)?.name ??
+  titleizeSlug(id);
+
 const displayHp = (value: number): number => Math.max(0, value);
 
 // " (HP 9 to 1)" when the value changed, else "". Avoids dashes.
