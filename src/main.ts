@@ -1,6 +1,6 @@
 import './styles/app.css';
 import {
-  APP_VERSION,
+  VERSION_INDICATOR,
   DEFAULT_SEED,
   DEFAULT_LEVEL,
   DEFAULT_MODE,
@@ -25,7 +25,7 @@ const applyLayoutVars = (): void => {
 
 const setVersionBadge = (): void => {
   const badge = document.getElementById('version-badge');
-  if (badge) badge.textContent = `dnd-web v${APP_VERSION}`;
+  if (badge) badge.textContent = VERSION_INDICATOR;
 };
 
 const requireElement = (id: string): HTMLElement => {
