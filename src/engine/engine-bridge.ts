@@ -1,13 +1,7 @@
 import { resolveContent, type ContentPack, type ResolvedContent } from 'dnd-srd-engine';
 import { loadStarterPack } from 'dnd-srd-engine/starter-pack';
-import { runBattle, type FuzzRest, type FuzzVs } from '@engine-fuzz';
-import {
-  TEAM_SIZE_1V1,
-  TEAM_SIZE_2V2,
-  type FuzzMode,
-  type FuzzVsKind,
-  type FuzzRestKind,
-} from '@/constants/app';
+import { runBattle, type FuzzVs } from '@engine-fuzz';
+import { TEAM_SIZE_1V1, TEAM_SIZE_2V2, type FuzzMode, type FuzzVsKind } from '@/constants/app';
 import type { Session } from '@/state/session';
 import { narrate } from '@/narrator';
 import { synthesizePositions } from '@/spatial/formation';
@@ -19,16 +13,13 @@ export interface BattleConfig {
   readonly mode: FuzzMode;
   readonly vs: FuzzVsKind;
   readonly level: number;
-  readonly rest: FuzzRestKind;
 }
 
-// Compile-time guard that the app's local fuzz unions stay assignable to
-// the engine's. If the engine narrows FuzzVs / FuzzRest, this breaks here
-// instead of silently at the runBattle call site.
+// Compile-time guard that the app's local fuzz union stays assignable to
+// the engine's. If the engine narrows FuzzVs, this breaks here instead of
+// silently at the runBattle call site.
 const _vsCheck: FuzzVs = 'pc' as FuzzVsKind;
-const _restCheck: FuzzRest = 'none' as FuzzRestKind;
 void _vsCheck;
-void _restCheck;
 
 // Owns the content pack (loaded once) and turns a BattleConfig into a
 // fully prepared Session: runs the deterministic fuzz battle, resolves
@@ -52,7 +43,8 @@ export class EngineBridge {
       seed: config.seed,
       pack: this.pack,
       level: config.level,
-      rest: config.rest,
+      // No post-battle rest; battles always end on the encounter outcome.
+      rest: 'none',
       teamSize: config.mode === '2v2' ? TEAM_SIZE_2V2 : TEAM_SIZE_1V1,
       vs: config.vs,
     });

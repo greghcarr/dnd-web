@@ -1,12 +1,5 @@
 import './styles/app.css';
-import {
-  APP_VERSION,
-  DEFAULT_SEED,
-  DEFAULT_LEVEL,
-  DEFAULT_MODE,
-  DEFAULT_VS,
-  DEFAULT_REST,
-} from '@/constants/app';
+import { APP_VERSION, DEFAULT_SEED, DEFAULT_LEVEL, DEFAULT_MODE, DEFAULT_VS } from '@/constants/app';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore } from '@/engine/replay-store';
@@ -40,7 +33,6 @@ const DEFAULT_CONFIG: BattleConfig = {
   mode: DEFAULT_MODE,
   vs: DEFAULT_VS,
   level: DEFAULT_LEVEL,
-  rest: DEFAULT_REST,
 };
 
 const boot = (): void => {

@@ -1,10 +1,9 @@
-// Config bar: the fuzz-scenario knobs (seed, mode, vs, level, rest) plus
-// a "Run battle" button. Reads the inputs on run and hands a BattleConfig
-// to the caller, which regenerates the session. These are exactly the
-// engine runBattle options.
+// Config bar: the fuzz-scenario knobs (seed, mode, vs, level). Reads the
+// inputs on change and hands a BattleConfig to the caller, which
+// regenerates the session.
 
 import type { BattleConfig } from '@/engine/engine-bridge';
-import { LEVEL_MIN, LEVEL_MAX, type FuzzMode, type FuzzVsKind, type FuzzRestKind } from '@/constants/app';
+import { LEVEL_MIN, LEVEL_MAX, type FuzzMode, type FuzzVsKind } from '@/constants/app';
 
 export interface ConfigBar {
   readonly unmount: () => void;
@@ -42,13 +41,6 @@ export const mountConfigBar = (
       <label>Level
         <select class="cfg-level">${levelOptions}</select>
       </label>
-      <label>Rest
-        <select class="cfg-rest">
-          <option value="none">None</option>
-          <option value="short">Short</option>
-          <option value="long">Long</option>
-        </select>
-      </label>
     </div>
   `;
 
@@ -56,8 +48,7 @@ export const mountConfigBar = (
   const modeSelect = root.querySelector<HTMLSelectElement>('.cfg-mode');
   const vsSelect = root.querySelector<HTMLSelectElement>('.cfg-vs');
   const levelSelect = root.querySelector<HTMLSelectElement>('.cfg-level');
-  const restSelect = root.querySelector<HTMLSelectElement>('.cfg-rest');
-  if (!seedInput || !modeSelect || !vsSelect || !levelSelect || !restSelect) {
+  if (!seedInput || !modeSelect || !vsSelect || !levelSelect) {
     throw new Error('config-bar: failed to mount template');
   }
 
@@ -65,14 +56,12 @@ export const mountConfigBar = (
   modeSelect.value = initial.mode;
   vsSelect.value = initial.vs;
   levelSelect.value = String(initial.level);
-  restSelect.value = initial.rest;
 
   const readConfig = (): BattleConfig => ({
     seed: parseIntOr(seedInput.value, initial.seed, 0, Number.MAX_SAFE_INTEGER),
     mode: modeSelect.value as FuzzMode,
     vs: vsSelect.value as FuzzVsKind,
     level: parseIntOr(levelSelect.value, initial.level, LEVEL_MIN, LEVEL_MAX),
-    rest: restSelect.value as FuzzRestKind,
   });
 
   const run = (): void => {
@@ -84,7 +73,7 @@ export const mountConfigBar = (
 
   // Reload the encounter the moment any value changes. Selects fire
   // immediately; the seed number input fires on commit (blur / Enter).
-  const controls = [seedInput, modeSelect, vsSelect, levelSelect, restSelect];
+  const controls = [seedInput, modeSelect, vsSelect, levelSelect];
   for (const control of controls) control.addEventListener('change', run);
 
   return {
