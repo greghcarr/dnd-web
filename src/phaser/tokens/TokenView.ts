@@ -38,6 +38,7 @@ import {
   HP_BAR_LOW_COLOR,
   HP_BAR_LOW_THRESHOLD,
   HIT_FLASH_COLOR,
+  cssHex,
 } from '@/constants/colors';
 
 const SPRITE_SCALE = 1.4;
@@ -123,8 +124,15 @@ export class TokenView {
         strokeThickness: 2,
       })
       .setOrigin(0.5, 0.5);
+    // The name's outline color marks which side the combatant is on.
     this.nameText = scene.add
-      .text(0, NAME_Y, name, { fontFamily: 'monospace', fontSize: '11px', color: '#e6e8ee' })
+      .text(0, NAME_Y, name, {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#e6e8ee',
+        stroke: cssHex(this.teamColor),
+        strokeThickness: 3,
+      })
       .setOrigin(0.5, 1);
 
     this.container = scene.add.container(x, y, [
@@ -175,9 +183,12 @@ export class TokenView {
     this.blinkTimer = undefined;
   }
 
+  // Only the active combatant shows a ring; team is conveyed by the name
+  // outline instead.
   private drawRing(active: boolean): void {
     this.ring.clear();
-    this.ring.lineStyle(active ? 4 : 2, active ? ACTIVE_RING_COLOR : this.teamColor, active ? 1 : 0.75);
+    if (!active) return;
+    this.ring.lineStyle(4, ACTIVE_RING_COLOR, 1);
     this.ring.strokeEllipse(0, 0, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
   }
 
