@@ -15,6 +15,7 @@ type DamageAppliedEvent = Extract<Event, { type: 'DamageApplied' }>;
 export const narrate = (
   events: ReadonlyArray<Event>,
   content: ResolvedContent,
+  winner: string | null = null,
 ): NarrationLine[] => {
   // Precompute the state before and after each event so name and HP
   // lookups are exact at the moment the event fired.
@@ -107,5 +108,18 @@ export const narrate = (
   }
 
   lines.sort((a, b) => a.eventIndex - b.eventIndex);
+
+  // The fuzz log has no EncounterEnded event, so synthesize a closing line
+  // from the result. Attributed to the last event so it appears only once
+  // the cursor reaches the end; appended after the sort so it renders last.
+  if (events.length > 0) {
+    const finalState = after[events.length - 1]!;
+    const text =
+      winner !== null
+        ? `The battle ends. ${characterName(finalState, winner)} is victorious.`
+        : 'The battle ends in a draw.';
+    lines.push({ eventIndex: events.length - 1, text, kind: 'turn' });
+  }
+
   return lines;
 };

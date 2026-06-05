@@ -88,7 +88,7 @@ export class EngineBridge {
       result,
       content: this.content,
       scrubCache,
-      narration: narrate(fullCampaign.events, this.content),
+      narration: narrate(fullCampaign.events, this.content, result.winner),
       formation: synthesizePositions(result.teamACharacterIds, result.teamBCharacterIds),
     };
   }
