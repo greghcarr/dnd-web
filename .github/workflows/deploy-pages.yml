@@ -1,0 +1,85 @@
+name: Deploy to GitHub Pages
+
+# Builds dnd-web (bundling the latest dnd-srd-engine source) and publishes
+# dist/ to GitHub Pages via the Actions-based flow. The engine is checked
+# out as a sibling of dnd-web in the workspace, so the default
+# ../dnd-srd-engine alias resolves; the engine is baked into the output, so
+# the deployed site has no runtime dependency on it.
+#
+# One-time repo setup: Settings -> Pages -> Source = "GitHub Actions"
+# (configure-pages enablement below also auto-enables it).
+#
+# Rebuilds on: a push to dnd-web main, a manual run, or a repository_dispatch
+# from the engine repo (see docs/deployment.md for the engine-side trigger).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  repository_dispatch:
+    types: [engine-updated]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dnd-web
+        uses: actions/checkout@v4
+        with:
+          path: dnd-web
+
+      - name: Checkout dnd-srd-engine (main)
+        uses: actions/checkout@v4
+        with:
+          repository: greghcarr/dnd-srd-engine
+          ref: main
+          path: dnd-srd-engine
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The engine is consumed from source; install its deps so its
+      # zod/immer/ulid resolve when bundled.
+      - name: Install engine deps
+        working-directory: dnd-srd-engine
+        run: npm install --no-audit --no-fund
+
+      - name: Install dnd-web deps
+        working-directory: dnd-web
+        run: npm ci
+
+      - name: Build
+        working-directory: dnd-web
+        env:
+          NODE_ENV: production
+          DND_ENGINE_PATH: ../dnd-srd-engine
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dnd-web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

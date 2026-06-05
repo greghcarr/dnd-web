@@ -10,6 +10,7 @@ Working docs for dnd-web. Start at the [project README](../README.md) for the ov
 | Make a change (conventions + workflow) | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Branching and versioning | [../DEVELOPMENT.md](../DEVELOPMENT.md) |
 | See what works and what is planned | [roadmap.md](roadmap.md) |
+| Publish to GitHub Pages | [deployment.md](deployment.md) |
 | Add or replace art | [../ASSET_MANIFEST.md](../ASSET_MANIFEST.md) |
 
 This is early-stage; expect this list to grow.

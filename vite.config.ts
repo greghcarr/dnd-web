@@ -1,14 +1,19 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
-// The engine lives in a sibling repo and is consumed directly from its
-// TypeScript source (not its built dist). Aliasing to source means any
-// engine edit hot-reloads here with no rebuild step, so dnd-web always
-// runs the live engine version. This mirrors how the engine's own demo
-// wires its dev mode (see ../dnd-srd-engine/vite.web.config.ts).
-const ENGINE_ROOT = resolve(__dirname, '../dnd-srd-engine');
+// The engine is consumed directly from its TypeScript source (not its
+// built dist), so any engine edit hot-reloads here with no rebuild and the
+// engine is bundled into the output at build time. Locally it is the
+// sibling repo; in CI (GitHub Pages) the deploy workflow checks the engine
+// out alongside dnd-web and DND_ENGINE_PATH points at it.
+const ENGINE_ROOT = resolve(__dirname, process.env.DND_ENGINE_PATH ?? '../dnd-srd-engine');
+
+// GitHub Pages serves a project site under /<repo>/, so the deploy
+// workflow sets BASE_PATH to that. Defaults to '/' for local dev/build.
+const BASE_PATH = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
+  base: BASE_PATH,
   resolve: {
     alias: [
       // Most specific subpath first so the bare-name rule doesn't shadow it.
