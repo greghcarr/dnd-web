@@ -7,6 +7,7 @@
 import type { Event } from 'dnd-srd-engine';
 import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
+import { collapseToggleHtml, makeCollapsible } from '@/ui/collapsible';
 import { createEventRow } from './event-row';
 
 const MAX_VISIBLE = 200;
@@ -18,7 +19,7 @@ export interface EventInspector {
 
 export const mountEventInspector = (root: HTMLElement, store: ReplayStore): EventInspector => {
   root.innerHTML = `
-    <div class="panel-header">Event log <span class="inspector-meta"></span></div>
+    <div class="panel-header">${collapseToggleHtml('Event log')}<span class="inspector-meta"></span></div>
     <div class="panel-scroll inspector-scroll">
       <button type="button" class="show-earlier" hidden></button>
       <ol class="event-list" aria-label="Event log"></ol>
@@ -28,9 +29,11 @@ export const mountEventInspector = (root: HTMLElement, store: ReplayStore): Even
   const list = root.querySelector<HTMLOListElement>('.event-list');
   const scroller = root.querySelector<HTMLDivElement>('.inspector-scroll');
   const showEarlier = root.querySelector<HTMLButtonElement>('.show-earlier');
-  if (!meta || !list || !scroller || !showEarlier) {
+  const toggle = root.querySelector<HTMLButtonElement>('.panel-collapse');
+  if (!meta || !list || !scroller || !showEarlier || !toggle) {
     throw new Error('event-inspector: failed to mount template');
   }
+  makeCollapsible(root, toggle);
 
   let showAll = false;
   let lastRenderedFirstIndex = -1;

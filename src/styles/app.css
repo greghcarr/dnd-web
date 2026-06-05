@@ -152,12 +152,56 @@ body {
 
 .panel-header {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 0.7rem;
   border-bottom: 1px solid var(--panel-border);
   font-weight: 600;
   font-size: 0.85rem;
   letter-spacing: 0.02em;
   color: var(--text-dim);
+}
+
+/* Header collapse toggle: looks like the header text, fills the row for a
+   large click target, and shrinks the panel to its header when active. */
+.panel-collapse {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-collapse:hover .panel-title {
+  color: var(--text);
+}
+.collapse-chevron {
+  flex: 0 0 auto;
+  width: 0.7rem;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* Collapsed log panel: header only, so its sibling expands to fill. */
+#event-inspector.collapsed,
+#narrator-console.collapsed {
+  flex: 0 0 auto;
+}
+#event-inspector.collapsed .panel-header,
+#narrator-console.collapsed .panel-header {
+  border-bottom: none;
+}
+#event-inspector.collapsed .panel-scroll,
+#narrator-console.collapsed .panel-scroll {
+  display: none;
 }
 
 .panel-scroll {
@@ -181,6 +225,7 @@ body {
 }
 
 .inspector-meta {
+  flex: 0 0 auto;
   font-weight: 400;
   font-family: var(--mono);
   font-size: 0.72rem;

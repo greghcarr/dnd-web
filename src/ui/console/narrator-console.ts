@@ -6,6 +6,7 @@
 import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import type { NarrationLine } from '@/narrator/types';
+import { collapseToggleHtml, makeCollapsible } from '@/ui/collapsible';
 
 const FOLLOW_TAIL_TOLERANCE_PX = 64;
 
@@ -34,14 +35,16 @@ const visibleCount = (narration: ReadonlyArray<NarrationLine>, cursor: number): 
 
 export const mountNarratorConsole = (root: HTMLElement, store: ReplayStore): NarratorConsole => {
   root.innerHTML = `
-    <div class="panel-header">Battle log</div>
+    <div class="panel-header">${collapseToggleHtml('Battle log')}</div>
     <div class="panel-scroll narrator-scroll">
       <ol class="narration-list" aria-label="Battle narration"></ol>
     </div>
   `;
   const list = root.querySelector<HTMLOListElement>('.narration-list');
   const scroller = root.querySelector<HTMLDivElement>('.narrator-scroll');
-  if (!list || !scroller) throw new Error('narrator-console: failed to mount template');
+  const toggle = root.querySelector<HTMLButtonElement>('.panel-collapse');
+  if (!list || !scroller || !toggle) throw new Error('narrator-console: failed to mount template');
+  makeCollapsible(root, toggle);
 
   let lastSession: Session | undefined;
   let renderedCount = 0;
