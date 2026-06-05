@@ -18,17 +18,16 @@ export interface EventInspector {
 
 export const mountEventInspector = (root: HTMLElement, store: ReplayStore): EventInspector => {
   root.innerHTML = `
-    <div class="panel-header">Event log <span class="inspector-meta"></span></div>
+    <div class="panel-header">Event log</div>
     <div class="panel-scroll inspector-scroll">
       <button type="button" class="show-earlier" hidden></button>
       <ol class="event-list" aria-label="Event log"></ol>
     </div>
   `;
-  const meta = root.querySelector<HTMLSpanElement>('.inspector-meta');
   const list = root.querySelector<HTMLOListElement>('.event-list');
   const scroller = root.querySelector<HTMLDivElement>('.inspector-scroll');
   const showEarlier = root.querySelector<HTMLButtonElement>('.show-earlier');
-  if (!meta || !list || !scroller || !showEarlier) {
+  if (!list || !scroller || !showEarlier) {
     throw new Error('event-inspector: failed to mount template');
   }
 
@@ -58,15 +57,12 @@ export const mountEventInspector = (root: HTMLElement, store: ReplayStore): Even
     lastRenderedCount = events.length;
   };
 
-  const render = (events: ReadonlyArray<Event>, cursor: number, total: number): void => {
+  const render = (events: ReadonlyArray<Event>): void => {
     const firstIndex = showAll ? 0 : Math.max(0, events.length - MAX_VISIBLE);
     const hidden = firstIndex;
 
     showEarlier.hidden = hidden === 0;
     showEarlier.textContent = `Show ${hidden} earlier event${hidden === 1 ? '' : 's'}`;
-    meta.textContent =
-      `step ${cursor} of ${total} · ` +
-      (hidden === 0 ? 'all visible' : `${events.length - hidden} of ${events.length} rendered`);
 
     // Fast path: appending newcomers to the same window we last rendered.
     const canAppend =
@@ -93,12 +89,12 @@ export const mountEventInspector = (root: HTMLElement, store: ReplayStore): Even
       followTail = true;
     }
     latest = snapshot;
-    render(snapshot.campaign.events, snapshot.cursor, snapshot.totalEvents);
+    render(snapshot.campaign.events);
   };
 
   showEarlier.addEventListener('pointerdown', () => {
     showAll = true;
-    render(latest.campaign.events, latest.cursor, latest.totalEvents);
+    render(latest.campaign.events);
   });
 
   const unsubscribe = store.subscribe(onSnapshot);
