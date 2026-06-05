@@ -26,6 +26,14 @@ const enginePkg = readJson(resolve(ENGINE_ROOT, 'package.json'));
 let engineSha = 'unknown';
 try {
   engineSha = execSync(`git -C "${ENGINE_ROOT}" rev-parse --short HEAD`, { encoding: 'utf8' }).trim();
+  // Append '+dirty' when the engine working tree has uncommitted
+  // changes. Catches the "I demoed a local build that secretly used
+  // unpushed engine code" failure mode -- the deployed bundle will
+  // ship the engine's committed state, but the badge here shows
+  // what's actually in THIS bundle. In CI the engine is freshly
+  // checked out and clean, so '+dirty' never appears in deploys.
+  const dirty = execSync(`git -C "${ENGINE_ROOT}" status --porcelain`, { encoding: 'utf8' }).trim();
+  if (dirty.length > 0) engineSha += '+dirty';
 } catch {
   // engine isn't a git checkout; leave as 'unknown'
 }
