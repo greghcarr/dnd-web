@@ -5,6 +5,7 @@
 
 export const RENDER_DEPTH = {
   GROUND: 0,
+  GRID: 5,
   FENCE: 10,
   WORLD_BASE: 1000,
 } as const;

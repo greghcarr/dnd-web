@@ -18,3 +18,7 @@ export const HP_BAR_LOW_COLOR = 0xe7553c;
 export const HP_BAR_LOW_THRESHOLD = 0.3;
 
 export const HIT_FLASH_COLOR = 0xffffff;
+
+// Debug grid overlay (see SHOW_GRID in constants/layout.ts).
+export const GRID_LINE_COLOR = 0x888888;
+export const GRID_LINE_ALPHA = 0.55;

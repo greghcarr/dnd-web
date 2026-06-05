@@ -19,9 +19,10 @@ import {
   ARENA_GROUND_PAD_TILES,
   PROP_CLEAR_TILES,
   PROP_DENSITY_PCT,
+  SHOW_GRID,
 } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
-import { GROUND_BASE_COLOR } from '@/constants/colors';
+import { GROUND_BASE_COLOR, GRID_LINE_COLOR, GRID_LINE_ALPHA } from '@/constants/colors';
 import { makeRng, type Rng } from '@/phaser/rng';
 
 const FENCE_WOOD_DARK = 0x5b3b1f;
@@ -91,6 +92,7 @@ export class ArenaScene extends Phaser.Scene {
     this.fenceBounds = expand(session.formation.bounds, FENCE_MARGIN_TILES);
     const rng = makeRng(session.seed);
     this.drawGround();
+    if (SHOW_GRID) this.drawGrid();
     this.scatterProps(session, rng);
     this.drawFence();
     this.createTokens(session);
@@ -108,6 +110,26 @@ export class ArenaScene extends Phaser.Scene {
         this.scenery.push(ground);
       }
     }
+  }
+
+  // Debug: gray lines on each tile boundary across the ground extent.
+  private drawGrid(): void {
+    const { minCol, maxCol, minRow, maxRow } = expand(this.fenceBounds!, ARENA_GROUND_PAD_TILES);
+    const left = minCol * GRID_TILE_PX;
+    const right = (maxCol + 1) * GRID_TILE_PX;
+    const top = minRow * GRID_TILE_PX;
+    const bottom = (maxRow + 1) * GRID_TILE_PX;
+    const grid = this.add.graphics().setDepth(RENDER_DEPTH.GRID);
+    grid.lineStyle(1, GRID_LINE_COLOR, GRID_LINE_ALPHA);
+    for (let col = minCol; col <= maxCol + 1; col++) {
+      const x = col * GRID_TILE_PX;
+      grid.lineBetween(x, top, x, bottom);
+    }
+    for (let row = minRow; row <= maxRow + 1; row++) {
+      const y = row * GRID_TILE_PX;
+      grid.lineBetween(left, y, right, y);
+    }
+    this.scenery.push(grid);
   }
 
   private scatterProps(session: Session, rng: Rng): void {
