@@ -3,7 +3,7 @@
 // here so this module stays free of an engine import. The engine-bridge
 // asserts they stay assignable to the engine's own FuzzVs / FuzzRest.
 
-export const APP_VERSION = '0.1.0-pre-alpha';
+export const APP_VERSION = '0.2.0-pre-alpha';
 
 // Top-level app modes shown in the mode selector. The fuzz replay viewer
 // is the only mode today; future modes (which reuse the replay viewer's
