@@ -17,15 +17,13 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
     <button type="button" class="t-play" title="Play" aria-label="Play">▶</button>
     <button type="button" class="t-next" title="Step forward" aria-label="Step forward">⏩</button>
     <button type="button" class="t-last" title="Jump to end" aria-label="Jump to end">⏭</button>
-    <span class="transport-cursor"></span>
   `;
   const btnFirst = root.querySelector<HTMLButtonElement>('.t-first');
   const btnPrev = root.querySelector<HTMLButtonElement>('.t-prev');
   const btnPlay = root.querySelector<HTMLButtonElement>('.t-play');
   const btnNext = root.querySelector<HTMLButtonElement>('.t-next');
   const btnLast = root.querySelector<HTMLButtonElement>('.t-last');
-  const cursorEl = root.querySelector<HTMLSpanElement>('.transport-cursor');
-  if (!btnFirst || !btnPrev || !btnPlay || !btnNext || !btnLast || !cursorEl) {
+  if (!btnFirst || !btnPrev || !btnPlay || !btnNext || !btnLast) {
     throw new Error('transport-bar: failed to mount template');
   }
 
@@ -46,7 +44,6 @@ export const mountTransportBar = (root: HTMLElement, store: ReplayStore): Transp
     btnPrev.disabled = cursor <= start;
     btnNext.disabled = cursor >= totalEvents;
     btnLast.disabled = cursor >= totalEvents;
-    cursorEl.textContent = `step ${cursor} / ${totalEvents}`;
     const playing = playTimer !== undefined;
     btnPlay.textContent = playing ? '⏸' : '▶';
     btnPlay.title = playing ? 'Pause' : 'Play';

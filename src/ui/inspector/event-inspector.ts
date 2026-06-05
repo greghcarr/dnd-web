@@ -18,16 +18,17 @@ export interface EventInspector {
 
 export const mountEventInspector = (root: HTMLElement, store: ReplayStore): EventInspector => {
   root.innerHTML = `
-    <div class="panel-header">Event log</div>
+    <div class="panel-header">Event log <span class="inspector-meta"></span></div>
     <div class="panel-scroll inspector-scroll">
       <button type="button" class="show-earlier" hidden></button>
       <ol class="event-list" aria-label="Event log"></ol>
     </div>
   `;
+  const meta = root.querySelector<HTMLSpanElement>('.inspector-meta');
   const list = root.querySelector<HTMLOListElement>('.event-list');
   const scroller = root.querySelector<HTMLDivElement>('.inspector-scroll');
   const showEarlier = root.querySelector<HTMLButtonElement>('.show-earlier');
-  if (!list || !scroller || !showEarlier) {
+  if (!meta || !list || !scroller || !showEarlier) {
     throw new Error('event-inspector: failed to mount template');
   }
 
@@ -89,6 +90,7 @@ export const mountEventInspector = (root: HTMLElement, store: ReplayStore): Even
       followTail = true;
     }
     latest = snapshot;
+    meta.textContent = `step ${snapshot.cursor} of ${snapshot.totalEvents}`;
     render(snapshot.campaign.events);
   };
 
