@@ -25,7 +25,10 @@ export interface AppMode {
   readonly id: string;
   readonly label: string;
 }
-export const APP_MODES: ReadonlyArray<AppMode> = [{ id: 'fuzz-replay', label: 'Fuzz Replay Viewer' }];
+export const APP_MODES: ReadonlyArray<AppMode> = [
+  { id: 'fuzz-replay', label: 'Fuzz Replay Viewer' },
+  { id: 'tactical-replay', label: 'Tactical Duel (movement)' },
+];
 export const DEFAULT_APP_MODE_ID = 'fuzz-replay';
 
 export type FuzzMode = '1v1' | '2v2';

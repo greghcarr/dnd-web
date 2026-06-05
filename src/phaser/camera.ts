@@ -1,14 +1,18 @@
 import Phaser from 'phaser';
 import type { FormationBounds } from '@/spatial/formation';
 import { GRID_TILE_PX, CAMERA_PADDING_TILES, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM } from '@/constants/layout';
+import { CAMERA_PAN_MS } from '@/constants/timing';
 
-// Fit the formation's bounding box (plus padding) into the map canvas and
-// centre it. The canvas occupies its own layout area (no overlapping
-// panel), so the whole camera viewport is usable. Static: recomputed only
-// on session change and resize.
-export const frameFormation = (
+// Fit a tile bounding box (plus padding) into the map canvas and centre it.
+// The canvas occupies its own layout area (no overlapping panel), so the
+// whole viewport is usable. Positionless battles call this once per session
+// with the static formation bounds; tactical battles call it every step
+// with the living combatants' bounds (animate=true follows the action on a
+// forward step, false snaps on jumps/rewinds/resize).
+export const frameBounds = (
   camera: Phaser.Cameras.Scene2D.Camera,
   bounds: FormationBounds,
+  animate: boolean,
 ): void => {
   const pad = CAMERA_PADDING_TILES;
   const left = (bounds.minCol - pad) * GRID_TILE_PX;
@@ -23,7 +27,14 @@ export const frameFormation = (
     CAMERA_MIN_ZOOM,
     CAMERA_MAX_ZOOM,
   );
+  const cx = (left + right) / 2;
+  const cy = (top + bottom) / 2;
 
-  camera.setZoom(zoom);
-  camera.centerOn((left + right) / 2, (top + bottom) / 2);
+  if (animate) {
+    camera.pan(cx, cy, CAMERA_PAN_MS, 'Quad.easeInOut');
+    camera.zoomTo(zoom, CAMERA_PAN_MS, 'Quad.easeInOut');
+  } else {
+    camera.setZoom(zoom);
+    camera.centerOn(cx, cy);
+  }
 };

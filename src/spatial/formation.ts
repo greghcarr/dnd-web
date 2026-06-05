@@ -3,6 +3,12 @@
 // arena: team A in column 0 facing right, team B in column 1 facing left.
 // 1v1 is two touching tiles; 2v2 is a 2x2 square. Pure and deterministic:
 // placement order comes from the seed-stable team id arrays, no RNG.
+//
+// Tactical battles instead carry real positions on the engine state;
+// formationFromEngine converts those into the same Placement shape so the
+// arena and camera consume one interface either way.
+
+import { cellOf, type EngineCombatant } from './engine-positions';
 
 export type Team = 'A' | 'B';
 export type Facing = 'left' | 'right';
@@ -69,5 +75,24 @@ export const synthesizePositions = (
   const placements = new Map<string, Placement>();
   placeTeam(teamAIds, 'A', TEAM_A_COL, 'right', placements);
   placeTeam(teamBIds, 'B', TEAM_B_COL, 'left', placements);
+  return { placements, bounds: computeBounds(placements) };
+};
+
+// Build the initial formation from the engine's real combatant positions
+// (tactical battles). Each feet-coord position becomes a cell; team A faces
+// right, team B left (their starting orientation). Combatants without a
+// position are skipped (should not happen once an encounter is placed).
+export const formationFromEngine = (
+  combatants: ReadonlyArray<EngineCombatant>,
+  teamAIds: ReadonlySet<string>,
+  cellSizeFeet: number,
+): Formation => {
+  const placements = new Map<string, Placement>();
+  for (const { combatantId, position } of combatants) {
+    if (!position) continue;
+    const { col, row } = cellOf(position, cellSizeFeet);
+    const team: Team = teamAIds.has(combatantId) ? 'A' : 'B';
+    placements.set(combatantId, { col, row, team, facing: team === 'A' ? 'right' : 'left' });
+  }
   return { placements, bounds: computeBounds(placements) };
 };

@@ -24,6 +24,7 @@ import {
   HP_TWEEN_MS,
   HIT_FLASH_MS,
   TOKEN_LUNGE_MS,
+  TOKEN_MOVE_MS,
   BLINK_MIN_MS,
   BLINK_MAX_MS,
   BLINK_DURATION_MS,
@@ -73,8 +74,9 @@ export class TokenView {
   private readonly nameText: Phaser.GameObjects.Text;
   private readonly teamColor: number;
   private readonly characterKey: string;
-  private readonly facing: 'left' | 'right';
-  private readonly facingSign: number;
+  private facing: 'left' | 'right';
+  private facingSign: number;
+  private framesPerRow = 1;
   private readonly idleTexture: string;
   private restFrame = 0;
   private blinkFrame?: number;
@@ -102,14 +104,11 @@ export class TokenView {
       .setScale(SPRITE_SCALE);
 
     // Resolve the rest and blink frame numbers for this pack and facing.
-    const framesPerRow = Math.max(
+    this.framesPerRow = Math.max(
       1,
       Math.floor(scene.textures.get(this.idleTexture).source[0]!.width / CHARACTER_FRAME_PX),
     );
-    const rowBase = getFacingRows(characterKey)[this.facing] * framesPerRow;
-    const idle = idleConfig(characterKey);
-    this.restFrame = rowBase + idle.rest;
-    this.blinkFrame = idle.blink.length > 0 ? rowBase + idle.blink[0]! : undefined;
+    this.applyFacingFrames();
     this.playIdle();
 
     const hpBg = scene.add.rectangle(0, BAR_Y, BAR_WIDTH, BAR_HEIGHT, HP_BAR_BG_COLOR).setOrigin(0.5, 0.5);
@@ -225,6 +224,51 @@ export class TokenView {
     this.drawRing(isActive);
   }
 
+  // Recompute the rest/blink frame numbers for the current facing row.
+  private applyFacingFrames(): void {
+    const rowBase = getFacingRows(this.characterKey)[this.facing] * this.framesPerRow;
+    const idle = idleConfig(this.characterKey);
+    this.restFrame = rowBase + idle.rest;
+    this.blinkFrame = idle.blink.length > 0 ? rowBase + idle.blink[0]! : undefined;
+  }
+
+  private setFacing(facing: 'left' | 'right'): void {
+    if (facing === this.facing) return;
+    this.facing = facing;
+    this.facingSign = facing === 'right' ? 1 : -1;
+    this.applyFacingFrames();
+    // Reflect the new direction immediately while standing idle.
+    if (!this.dead && !this.sprite.anims.isPlaying) {
+      this.sprite.setTexture(this.idleTexture, this.restFrame);
+    }
+  }
+
+  // Reflect a position change at the cursor (tactical mode): slide to the
+  // new tile on a single forward step, snap on jumps/rewinds. Turns to face
+  // the travel direction; depth tracks world Y so y-sort stays correct.
+  moveTo(col: number, row: number, animate: boolean): void {
+    if (this.destroyed) return;
+    const x = (col + 0.5) * GRID_TILE_PX;
+    const y = (row + TILE_GROUND_FRAC) * GRID_TILE_PX;
+    if (x === this.container.x && y === this.container.y) return;
+    const dx = x - this.container.x;
+    if (Math.abs(dx) > 0.5) this.setFacing(dx > 0 ? 'right' : 'left');
+    this.scene.tweens.killTweensOf(this.container);
+    if (animate) {
+      this.scene.tweens.add({
+        targets: this.container,
+        x,
+        y,
+        duration: TOKEN_MOVE_MS,
+        ease: 'Quad.easeInOut',
+        onUpdate: () => this.container.setDepth(RENDER_DEPTH.WORLD_BASE + this.container.y),
+      });
+    } else {
+      this.container.setPosition(x, y);
+      this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
+    }
+  }
+
   // Transient: this combatant just attacked. Lunge toward the target and
   // play the attack animation, then settle back to idle.
   playAttack(): void {
@@ -273,7 +317,7 @@ export class TokenView {
   destroy(): void {
     this.destroyed = true;
     this.cancelBlink();
-    this.scene.tweens.killTweensOf([this.sprite, this.hpFill]);
+    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container]);
     this.container.destroy();
   }
 }
