@@ -50,6 +50,11 @@ const BAR_Y = HEAD_Y - 8;
 const NAME_Y = BAR_Y - 5;
 const RING_RADIUS_X = GRID_TILE_PX * 0.42;
 const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
+// The container origin sits at the feet (TILE_GROUND_FRAC down the tile),
+// so a ring drawn there rides the bottom grid line. Nudge it up to the
+// center of the tile's lower half so it sits neatly within that half.
+const TILE_LOWER_HALF_CENTER_FRAC = 0.75;
+const RING_Y = (TILE_LOWER_HALF_CENTER_FRAC - TILE_GROUND_FRAC) * GRID_TILE_PX;
 
 export class TokenView {
   private readonly scene: Phaser.Scene;
@@ -177,7 +182,7 @@ export class TokenView {
     this.ring.clear();
     if (!active) return;
     this.ring.lineStyle(4, ACTIVE_RING_COLOR, 1);
-    this.ring.strokeEllipse(0, 0, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
+    this.ring.strokeEllipse(0, RING_Y, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
   }
 
   // Declarative: reflect the engine state at the cursor.
