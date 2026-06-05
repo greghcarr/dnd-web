@@ -3,7 +3,20 @@
 // here so this module stays free of an engine import. The engine-bridge
 // asserts they stay assignable to the engine's own FuzzVs / FuzzRest.
 
-export const APP_VERSION = '0.2.0-pre-alpha';
+// App name + version derive from package.json at build time (vite
+// `define` injects them; see vite.config.ts). This makes the two
+// sources of truth (package.json + APP_VERSION) impossible to drift,
+// replacing the prior hand-maintained string-literal convention.
+export const APP_NAME = __APP_NAME__;
+export const APP_VERSION = __APP_VERSION__;
+export const ENGINE_VERSION = __ENGINE_VERSION__;
+export const ENGINE_SHA = __ENGINE_SHA__;
+
+// Composed indicator the version-badge renders. Format:
+//   "<appName> <appVersion> / engine <engineVersion> (<engineSha>)"
+// e.g. "dnd-web 0.2.0-pre-alpha / engine 0.4.0-alpha.0 (5b3e3c8)".
+export const VERSION_INDICATOR =
+  `${APP_NAME} ${APP_VERSION} / engine ${ENGINE_VERSION} (${ENGINE_SHA})`;
 
 // Top-level app modes shown in the mode selector. The fuzz replay viewer
 // is the only mode today; future modes (which reuse the replay viewer's

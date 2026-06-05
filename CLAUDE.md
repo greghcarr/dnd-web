@@ -18,7 +18,7 @@ dnd-web is a 2D top-down browser viewer for the sibling [dnd-srd-engine](../dnd-
 
 ## Conventions
 
-TypeScript strict. Phaser: `pointerdown` not `click`, tween-based animation, depth from [constants/depths.ts](src/constants/depths.ts). File references as markdown links; no em or en dashes. Version in [package.json](package.json) and `APP_VERSION` kept in sync. Full list in [CONTRIBUTING.md](CONTRIBUTING.md).
+TypeScript strict. Phaser: `pointerdown` not `click`, tween-based animation, depth from [constants/depths.ts](src/constants/depths.ts). File references as markdown links; no em or en dashes. Version lives in [package.json](package.json); `APP_VERSION` derives from it at build time via Vite `define` (see [vite.config.ts](vite.config.ts)), so the two cannot drift. Full list in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Key files
 

@@ -24,7 +24,7 @@ Rules and battle state live in the engine; dnd-web is presentation. If a change 
 - Small, intention-revealing functions; prefer editing existing files over adding new ones.
 - Reference files in prose as markdown links, not backtick paths. No em or en dashes.
 - Phaser: `pointerdown` (not `click`), `useHandCursor` on interactive objects, tween-based animation, manual AABB/circle (no Arcade Physics), and every game object sets its depth from [constants/depths.ts](src/constants/depths.ts).
-- The version lives in both [package.json](package.json) and `APP_VERSION` ([src/constants/app.ts](src/constants/app.ts)); keep them in sync.
+- The version lives in [package.json](package.json). `APP_VERSION` in [src/constants/app.ts](src/constants/app.ts) derives from it at build time via Vite `define` (see [vite.config.ts](vite.config.ts)); the engine version + short SHA are injected the same way and surfaced together in the version-badge. To bump the app version, edit `package.json` only.
 
 ## Where things go
 
