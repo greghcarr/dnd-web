@@ -58,6 +58,9 @@ const SILENT = new Set<string>([
   'SteadyAimConsumed',
   'WeaponMasteryActivated',
   'HeroPointGranted',
+  // Internal level-up mechanics; LevelUpResolved carries the readable line.
+  'ChoiceRequired',
+  'ChoiceResolved',
 ]);
 
 export const isSilent = (type: string): boolean => SILENT.has(type);
@@ -186,6 +189,11 @@ export const formatEvent = (
     case 'ShortRestEnded':
     case 'LongRestEnded':
       return { text: 'The rest ends.', kind: 'rest' };
+    case 'LevelUpResolved': {
+      const who = characterName(before, e.characterId);
+      const className = content.classes.get(e.classId)?.name ?? e.classId;
+      return { text: `${who} reaches ${className} level ${e.newClassLevel}.`, kind: 'info' };
+    }
     default:
       return { text: `${humanLabel(e.type)}.`, kind: 'info' };
   }

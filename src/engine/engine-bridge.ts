@@ -60,14 +60,18 @@ export class EngineBridge {
     const fullCampaign = result.campaign;
     const totalEvents = fullCampaign.events.length;
 
-    // Open the replay just after the last combatant spawns, so the viewer
-    // sees the fully-populated arena before any actions, with the event
-    // log positioned accordingly.
+    // Open the replay at the start of the first turn, after all setup
+    // (spawns, level-ups, initiative) but before any combat action, so the
+    // viewer sees the fully populated, fully leveled arena. Fall back to
+    // just after the last spawn if no turn ever begins.
     let lastSpawn = -1;
+    let firstTurn = -1;
     for (let i = 0; i < fullCampaign.events.length; i++) {
-      if (fullCampaign.events[i]!.type === 'CharacterCreated') lastSpawn = i;
+      const type = fullCampaign.events[i]!.type;
+      if (type === 'CharacterCreated') lastSpawn = i;
+      if (firstTurn < 0 && type === 'TurnStarted') firstTurn = i;
     }
-    const openingCursor = lastSpawn + 1;
+    const openingCursor = firstTurn >= 0 ? firstTurn + 1 : lastSpawn + 1;
 
     // Pin the genesis (0) and end (totalEvents) anchors so they never
     // evict, then seed both so the pins actually hold.
