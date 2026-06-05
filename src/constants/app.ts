@@ -5,6 +5,16 @@
 
 export const APP_VERSION = '0.1.0-pre-alpha';
 
+// Top-level app modes shown in the mode selector. The fuzz replay viewer
+// is the only mode today; future modes (which reuse the replay viewer's
+// components) are added here and handled in main's mode switch.
+export interface AppMode {
+  readonly id: string;
+  readonly label: string;
+}
+export const APP_MODES: ReadonlyArray<AppMode> = [{ id: 'fuzz-replay', label: 'Fuzz Replay Viewer' }];
+export const DEFAULT_APP_MODE_ID = 'fuzz-replay';
+
 export type FuzzMode = '1v1' | '2v2';
 export type FuzzVsKind = 'pc' | 'monster';
 

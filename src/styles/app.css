@@ -105,6 +105,23 @@ body {
   overflow: hidden;
 }
 
+#mode-selector {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.6rem;
+}
+.mode-select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 #config-bar {
   flex: 0 0 auto;
   padding: 0.6rem 0.7rem;
