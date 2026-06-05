@@ -6,6 +6,8 @@
 import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import type { NarrationLine } from '@/narrator/types';
+import { splitTaggedNames } from '@/narrator/resolve';
+import { classTextColor } from '@/constants/class-colors';
 import { collapseToggleHtml, makeCollapsible } from '@/ui/collapsible';
 
 const FOLLOW_TAIL_TOLERANCE_PX = 64;
@@ -17,7 +19,20 @@ export interface NarratorConsole {
 const createRow = (line: NarrationLine): HTMLLIElement => {
   const li = document.createElement('li');
   li.className = `narration-row narration-${line.kind}`;
-  li.textContent = line.text;
+  // Character-name runs carry a class id; render them in the class color
+  // (WoW-style), everything else as plain text. Built as DOM nodes (not
+  // innerHTML) so names are never interpreted as markup.
+  for (const segment of splitTaggedNames(line.text)) {
+    if (segment.classId === undefined) {
+      li.appendChild(document.createTextNode(segment.text));
+      continue;
+    }
+    const span = document.createElement('span');
+    span.className = 'narration-name';
+    span.style.color = classTextColor(segment.classId);
+    span.textContent = segment.text;
+    li.appendChild(span);
+  }
   if (line.attackEventIndex !== undefined) li.dataset.attackIndex = String(line.attackEventIndex);
   return li;
 };

@@ -250,6 +250,10 @@ body {
   color: #cdd3df;
   border-bottom: 1px solid var(--panel-border);
 }
+/* Character names, colored inline by class (color set per element). */
+.narration-name {
+  font-weight: 600;
+}
 .narration-miss {
   color: var(--text-dim);
 }

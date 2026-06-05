@@ -6,8 +6,28 @@
 
 import type { CampaignState, ResolvedContent } from 'dnd-srd-engine';
 
+// Character-name runs are wrapped with these private-use markers so the
+// battle log can color each name in its class color without the curated
+// sentence builders having to thread color through every template. The
+// markers never occur in real text; only splitTaggedNames interprets them
+// (everywhere else they ride along inertly). Format:
+//   OPEN <classId> SEP <display text> CLOSE
+const NAME_OPEN = String.fromCharCode(0xe000);
+const NAME_SEP = String.fromCharCode(0xe001);
+const NAME_CLOSE = String.fromCharCode(0xe002);
+const NAME_PATTERN = new RegExp(
+  `${NAME_OPEN}([^${NAME_SEP}]*)${NAME_SEP}([^${NAME_CLOSE}]*)${NAME_CLOSE}`,
+  'g',
+);
+
+const tagName = (classId: string, text: string): string =>
+  `${NAME_OPEN}${classId}${NAME_SEP}${text}${NAME_CLOSE}`;
+
+const classOf = (state: CampaignState, id: string): string =>
+  state.characters[id]?.classes[0]?.classId ?? '';
+
 export const characterName = (state: CampaignState, id: string): string =>
-  state.characters[id]?.name ?? `<${id.slice(0, 8)}>`;
+  tagName(classOf(state, id), state.characters[id]?.name ?? `<${id.slice(0, 8)}>`);
 
 export const classSpeciesLabel = (
   state: CampaignState,
@@ -20,8 +40,38 @@ export const classSpeciesLabel = (
   const className = enrollment ? content.classes.get(enrollment.classId)?.name : undefined;
   const speciesName = content.species.get(ch.speciesId)?.name;
   const bits = [className, speciesName].filter((b): b is string => Boolean(b));
-  return bits.length > 0 ? `${ch.name} the ${bits.join(' ')}` : ch.name;
+  const label = bits.length > 0 ? `${ch.name} the ${bits.join(' ')}` : ch.name;
+  return tagName(enrollment?.classId ?? '', label);
 };
+
+// A run of narration text: plain text, or a character-name run tagged with
+// the class id that drives its color. Plain runs leave classId undefined.
+export interface NarrationSegment {
+  readonly text: string;
+  readonly classId?: string;
+}
+
+// Split a tagged narration string into renderable segments. Name runs with
+// a non-empty class id become colored segments; empty-class names (e.g.
+// creatures) fold back into plain text.
+export const splitTaggedNames = (text: string): NarrationSegment[] => {
+  const segments: NarrationSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(NAME_PATTERN)) {
+    const start = match.index!;
+    if (start > last) segments.push({ text: text.slice(last, start) });
+    const classId = match[1] ?? '';
+    segments.push(classId ? { text: match[2]!, classId } : { text: match[2]! });
+    last = start + match[0].length;
+  }
+  if (last < text.length) segments.push({ text: text.slice(last) });
+  return segments;
+};
+
+// The name+descriptor phrase used by CharacterCreated, tagged so the whole
+// "Bran the Level 1 Wizard" reads in the wizard color.
+export const tagCharacterPhrase = (classId: string, phrase: string): string =>
+  tagName(classId, phrase);
 
 // First reference to a character within a turn gets the enriched label;
 // later references in the same turn use the bare name. The caller resets

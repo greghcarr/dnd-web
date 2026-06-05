@@ -16,6 +16,7 @@ import {
   summarizeDamage,
   hpChangeLabel,
   ordinal,
+  tagCharacterPhrase,
 } from './resolve';
 
 export interface NarrationContext {
@@ -86,7 +87,8 @@ export const formatEvent = (
       const cls = c.classes
         .map((x) => `Level ${x.level} ${content.classes.get(x.classId)?.name ?? x.classId}`)
         .join(' / ');
-      return { text: `${c.name} the ${cls} enters the arena (${c.hp.current}/${c.hp.max} HP).`, kind: 'info' };
+      const phrase = tagCharacterPhrase(c.classes[0]?.classId ?? '', `${c.name} the ${cls}`);
+      return { text: `${phrase} enters the arena (${c.hp.current}/${c.hp.max} HP).`, kind: 'info' };
     }
     case 'EncounterStarted':
       return { text: 'The battle begins.', kind: 'turn' };
