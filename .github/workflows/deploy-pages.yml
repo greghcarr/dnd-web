@@ -9,15 +9,14 @@ name: Deploy to GitHub Pages
 # One-time repo setup: Settings -> Pages -> Source = "GitHub Actions"
 # (configure-pages enablement below also auto-enables it).
 #
-# Rebuilds on: a push to dnd-web main, a manual run, or a repository_dispatch
-# from the engine repo (see docs/deployment.md for the engine-side trigger).
+# Rebuilds on: a push to dnd-web main, or a manual run. (The engine repo
+# does not auto-trigger a rebuild from its own pushes; consumers redeploy
+# only on their own main commits per the symmetric model.)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-  repository_dispatch:
-    types: [engine-updated]
 
 permissions:
   contents: read
