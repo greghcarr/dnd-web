@@ -11,15 +11,13 @@ import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore } from '@/engine/replay-store';
 import { createGame } from '@/phaser/game';
-import { mountTransportBar } from '@/ui/transport/transport-bar';
-import { mountEventInspector } from '@/ui/inspector/event-inspector';
-import { mountConfigBar } from '@/ui/inspector/config-bar';
-import { mountNarratorConsole } from '@/ui/console/narrator-console';
 import { mountModeSelector } from '@/ui/mode-selector';
+import type { Mode, ModeContext } from '@/modes/mode';
+import { fuzzReplayViewerMode } from '@/modes/fuzz-replay-viewer';
 
-// Composition root. Owns the engine bridge + replay store, boots the
-// Phaser arena, and mounts the DOM panels (transport, narrator console,
-// event inspector, config) against the store.
+// Composition root. Owns the shared infrastructure (engine bridge, replay
+// store, Phaser arena) and switches between app modes, each of which
+// builds its own side-panel content against the shared store.
 
 const applyLayoutVars = (): void => {
   document.documentElement.style.setProperty('--right-col', `${RIGHT_COL_PX}px`);
@@ -43,28 +41,41 @@ const DEFAULT_CONFIG: BattleConfig = {
   level: DEFAULT_LEVEL,
 };
 
+// Mode registry, keyed by the ids in APP_MODES. Add future modes here.
+const MODES: Readonly<Record<string, Mode>> = {
+  'fuzz-replay': fuzzReplayViewerMode,
+};
+
 const boot = (): void => {
   applyLayoutVars();
   setVersionBadge();
 
   const bridge = new EngineBridge();
-  const config: BattleConfig = { ...DEFAULT_CONFIG };
-  const store = new ReplayStore(bridge.startBattle(config));
+  let currentConfig: BattleConfig = { ...DEFAULT_CONFIG };
+  const store = new ReplayStore(bridge.startBattle(currentConfig));
 
   createGame('game-root', store);
 
-  // Only the fuzz replay viewer exists today. Future modes (added to
-  // APP_MODES) reuse the store/game/panels and would be swapped in here.
-  mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, () => {});
-
-  mountTransportBar(requireElement('transport'), store);
-  mountNarratorConsole(requireElement('narrator-console'), store);
-  mountEventInspector(requireElement('event-inspector'), store);
-
-  const runBattle = (next: BattleConfig): void => {
-    store.loadSession(bridge.startBattle(next));
+  const ctx: ModeContext = {
+    store,
+    bridge,
+    content: requireElement('mode-content'),
+    runBattle: (config) => {
+      currentConfig = config;
+      store.loadSession(bridge.startBattle(config));
+    },
+    getConfig: () => currentConfig,
   };
-  mountConfigBar(requireElement('config-bar'), config, runBattle);
+
+  let teardownMode: (() => void) | undefined;
+  const switchMode = (modeId: string): void => {
+    teardownMode?.();
+    const mode = MODES[modeId] ?? fuzzReplayViewerMode;
+    teardownMode = mode.mount(ctx);
+  };
+
+  mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
+  switchMode(DEFAULT_APP_MODE_ID);
 };
 
 boot();
