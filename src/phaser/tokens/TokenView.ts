@@ -17,6 +17,7 @@ import {
   CHARACTER_HEAD_FRAC,
   TOKEN_LUNGE_PX,
   TOKEN_RECOIL_PX,
+  CAMERA_MAX_ZOOM,
 } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
 import {
@@ -40,6 +41,12 @@ import {
 } from '@/constants/colors';
 
 const SPRITE_SCALE = 1.4;
+// pixelArt mode upscales every texture with nearest-neighbor, so the tiny
+// label textures turn blocky when the camera zooms in (up to
+// CAMERA_MAX_ZOOM). Rendering the labels at this many device pixels per CSS
+// pixel gives the zoom enough source detail to stay crisp; the pixel-art
+// sprites are untouched.
+const LABEL_RESOLUTION = Math.ceil(CAMERA_MAX_ZOOM * Math.max(1, window.devicePixelRatio || 1));
 // Feet sit at the container origin (the tile ground point); the head is
 // this far above it, so the HP bar and name sit just above the head.
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
@@ -116,6 +123,7 @@ export class TokenView {
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 2,
+        resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 0.5);
     // The name's outline color marks which side the combatant is on.
@@ -126,6 +134,7 @@ export class TokenView {
         color: '#e6e8ee',
         stroke: cssHex(this.teamColor),
         strokeThickness: 3,
+        resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 1);
 
