@@ -33,12 +33,21 @@ const FENCE_WOOD_LIGHT = 0x9c6b3e;
 const PROP_OFFSET_X = GRID_TILE_PX * 0.5;
 const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
 
-// Tactical-arena terrain rendering: impassable cover blocks sight/movement
-// (a tall tree), difficult terrain slows (low brush), water is tinted.
-const IMPASSABLE_PROP_KEY = 'tree-1';
-const DIFFICULT_PROP_KEY = 'bush-2';
+// Tactical-arena terrain rendering, seed-deterministic for variety:
+// impassable cover blocks sight/movement (tall trees, varied), difficult
+// terrain slows (low brush), water is tinted, and open ground gets sparse
+// decorative clutter (low bushes/stones that don't block) like the fuzz
+// viewer. Only the tall trees mark real blockers, so cover stays readable.
+const COVER_PROP_KEYS = ['tree-1', 'tree-2'] as const;
+const COVER_SCALE_MIN = 0.85;
+const COVER_SCALE_MAX = 1.15;
+const BRUSH_PROP_KEYS = ['bush-1', 'bush-3', 'bush-5'] as const;
+const DECOR_PROP_KEYS = ['bush-2', 'bush-4', 'stone-1', 'stone-2', 'stone-3', 'stone-4', 'stone-5'] as const;
+const TACTICAL_DECOR_PCT = 14;
 const WATER_TINT_COLOR = 0x3a6ea5;
 const WATER_TINT_ALPHA = 0.45;
+
+const pick = <T>(arr: ReadonlyArray<T>, rng: Rng): T => arr[Math.floor(rng() * arr.length)]!;
 
 const expand = (bounds: FormationBounds, by: number): FormationBounds => ({
   minCol: bounds.minCol - by,
@@ -127,9 +136,11 @@ export class ArenaScene extends Phaser.Scene {
   // starting cells (the formation built from engine positions).
   private buildTacticalArena(session: Session, map: LocationMap): void {
     this.fenceBounds = { minCol: 0, maxCol: map.widthCells - 1, minRow: 0, maxRow: map.heightCells - 1 };
+    const rng = makeRng(session.seed);
     this.drawGround();
     if (SHOW_GRID) this.drawGrid();
-    this.drawCover(map);
+    this.drawTerrain(map, rng);
+    this.scatterTacticalDecor(session, map, rng);
     this.drawFence();
     this.createTokens(session);
   }
@@ -195,26 +206,62 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  // Draw the tactical map's terrain: impassable cells get a tall blocker
-  // (so cover/LoS reads correctly), difficult cells low brush, water a tint.
-  private drawCover(map: LocationMap): void {
+  // Draw the tactical map's terrain, varied per seed: impassable cells get a
+  // tall blocker (so cover/LoS reads correctly), difficult cells low brush,
+  // water a tint. Cover stays centred on its cell so it maps 1:1 to the
+  // blocked tile.
+  private drawTerrain(map: LocationMap, rng: Rng): void {
     for (let row = 0; row < map.heightCells; row++) {
       for (let col = 0; col < map.widthCells; col++) {
         const terrain = map.terrain[row]?.[col];
-        if (terrain === 'impassable') this.placeProp(IMPASSABLE_PROP_KEY, col, row);
-        else if (terrain === 'difficult') this.placeProp(DIFFICULT_PROP_KEY, col, row);
-        else if (terrain === 'water') this.tintCell(col, row, WATER_TINT_COLOR, WATER_TINT_ALPHA);
+        if (terrain === 'impassable') {
+          this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
+            flip: rng() < 0.5,
+            scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
+          });
+        } else if (terrain === 'difficult') {
+          this.placeProp(pick(BRUSH_PROP_KEYS, rng), col, row, { flip: rng() < 0.5 });
+        } else if (terrain === 'water') {
+          this.tintCell(col, row, WATER_TINT_COLOR, WATER_TINT_ALPHA);
+        }
       }
     }
   }
 
-  private placeProp(key: string, col: number, row: number): void {
+  // Sparse, seed-deterministic ground clutter on open (normal) cells, like
+  // the fuzz viewer's scatter. Low props only (bushes/stones) so they read
+  // as passable decor, never confused with the blocking cover. Kept off the
+  // combatants' starting cells.
+  private scatterTacticalDecor(session: Session, map: LocationMap, rng: Rng): void {
+    const spawn = new Set<string>();
+    for (const { col, row } of session.formation.placements.values()) spawn.add(`${col},${row}`);
+    for (let row = 1; row < map.heightCells - 1; row++) {
+      for (let col = 1; col < map.widthCells - 1; col++) {
+        if (map.terrain[row]?.[col] !== 'normal') continue;
+        if (spawn.has(`${col},${row}`)) continue;
+        if (rng() * 100 >= TACTICAL_DECOR_PCT) continue;
+        this.placeProp(pick(DECOR_PROP_KEYS, rng), col, row, {
+          flip: rng() < 0.5,
+          offsetX: (rng() - 0.5) * PROP_OFFSET_X,
+          offsetY: (rng() - 0.5) * PROP_OFFSET_Y,
+        });
+      }
+    }
+  }
+
+  private placeProp(
+    key: string,
+    col: number,
+    row: number,
+    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number } = {},
+  ): void {
     const spec = PROP_SPECS.find((s) => s.key === key);
     if (!spec) return;
-    const x = (col + 0.5) * GRID_TILE_PX;
-    const y = (row + TILE_GROUND_FRAC) * GRID_TILE_PX;
+    const x = (col + 0.5) * GRID_TILE_PX + (opts.offsetX ?? 0);
+    const y = (row + TILE_GROUND_FRAC) * GRID_TILE_PX + (opts.offsetY ?? 0);
     const prop = this.add.image(x, y, spec.key).setOrigin(0.5, 1);
-    prop.setScale((spec.heightTiles * GRID_TILE_PX) / prop.height);
+    prop.setScale((spec.heightTiles * (opts.scale ?? 1) * GRID_TILE_PX) / prop.height);
+    if (opts.flip) prop.setFlipX(true);
     prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
     this.scenery.push(prop);
   }
