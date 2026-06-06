@@ -41,6 +41,12 @@ const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
 const COVER_PROP_KEYS = ['tree-1', 'tree-2'] as const;
 const COVER_SCALE_MIN = 0.85;
 const COVER_SCALE_MAX = 1.15;
+// The arena's outer impassable ring (contiguous with the map edge) renders
+// as a rocky border; interior impassable cells stay tree pillars. Stones
+// are small props, so scale them up into boulders.
+const BORDER_ROCK_KEYS = ['stone-1', 'stone-2', 'stone-3', 'stone-4', 'stone-5'] as const;
+const BORDER_ROCK_SCALE_MIN = 1.8;
+const BORDER_ROCK_SCALE_MAX = 2.3;
 const BRUSH_PROP_KEYS = ['bush-1', 'bush-3', 'bush-5'] as const;
 const DECOR_PROP_KEYS = ['bush-2', 'bush-4', 'stone-1', 'stone-2', 'stone-3', 'stone-4', 'stone-5'] as const;
 const TACTICAL_DECOR_PCT = 14;
@@ -141,7 +147,7 @@ export class ArenaScene extends Phaser.Scene {
     if (SHOW_GRID) this.drawGrid();
     this.drawTerrain(map, rng);
     this.scatterTacticalDecor(session, map, rng);
-    this.drawFence();
+    // No wooden fence: the arena's rock border is its boundary.
     this.createTokens(session);
   }
 
@@ -211,14 +217,22 @@ export class ArenaScene extends Phaser.Scene {
   // water a tint. Cover stays centred on its cell so it maps 1:1 to the
   // blocked tile.
   private drawTerrain(map: LocationMap, rng: Rng): void {
+    const border = this.borderImpassable(map);
     for (let row = 0; row < map.heightCells; row++) {
       for (let col = 0; col < map.widthCells; col++) {
         const terrain = map.terrain[row]?.[col];
         if (terrain === 'impassable') {
-          this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
-            flip: rng() < 0.5,
-            scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
-          });
+          if (border.has(`${col},${row}`)) {
+            this.placeProp(pick(BORDER_ROCK_KEYS, rng), col, row, {
+              flip: rng() < 0.5,
+              scale: BORDER_ROCK_SCALE_MIN + rng() * (BORDER_ROCK_SCALE_MAX - BORDER_ROCK_SCALE_MIN),
+            });
+          } else {
+            this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
+              flip: rng() < 0.5,
+              scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
+            });
+          }
         } else if (terrain === 'difficult') {
           this.placeProp(pick(BRUSH_PROP_KEYS, rng), col, row, { flip: rng() < 0.5 });
         } else if (terrain === 'water') {
@@ -226,6 +240,40 @@ export class ArenaScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  // Impassable cells reachable from the map edge through other impassable
+  // cells: the arena's outer wall. Interior pillars and fenced pens aren't
+  // edge-connected, so they fall outside this set and render as trees.
+  private borderImpassable(map: LocationMap): Set<string> {
+    const W = map.widthCells;
+    const H = map.heightCells;
+    const imp = (c: number, r: number): boolean => map.terrain[r]?.[c] === 'impassable';
+    const seen = new Set<string>();
+    const stack: Array<[number, number]> = [];
+    const seed = (c: number, r: number): void => {
+      const k = `${c},${r}`;
+      if (imp(c, r) && !seen.has(k)) {
+        seen.add(k);
+        stack.push([c, r]);
+      }
+    };
+    for (let c = 0; c < W; c++) {
+      seed(c, 0);
+      seed(c, H - 1);
+    }
+    for (let r = 0; r < H; r++) {
+      seed(0, r);
+      seed(W - 1, r);
+    }
+    while (stack.length > 0) {
+      const [c, r] = stack.pop()!;
+      seed(c + 1, r);
+      seed(c - 1, r);
+      seed(c, r + 1);
+      seed(c, r - 1);
+    }
+    return seen;
   }
 
   // Sparse, seed-deterministic ground clutter on open (normal) cells, like
