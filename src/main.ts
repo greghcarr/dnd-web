@@ -2,6 +2,7 @@ import './styles/app.css';
 import {
   VERSION_INDICATOR,
   DEFAULT_SEED,
+  TACTICAL_DEFAULT_SEED,
   DEFAULT_LEVEL,
   DEFAULT_MODE,
   DEFAULT_VS,
@@ -44,15 +45,16 @@ const DEFAULT_CONFIG: BattleConfig = {
 };
 
 // Mode registry, keyed by the ids in APP_MODES. Both replay viewers reuse
-// the same panels; they differ only in the movement kind of the battles
-// they generate. Add future modes here.
+// the same panels; they differ in the movement kind of the battles they
+// generate and the seed each opens on. Add future modes here.
 interface ModeEntry {
   readonly mode: Mode;
   readonly movement: FuzzMovement;
+  readonly defaultSeed: number;
 }
 const MODES: Readonly<Record<string, ModeEntry>> = {
-  'fuzz-replay': { mode: fuzzReplayViewerMode, movement: 'none' },
-  'tactical-replay': { mode: fuzzReplayViewerMode, movement: 'tactical' },
+  'fuzz-replay': { mode: fuzzReplayViewerMode, movement: 'none', defaultSeed: DEFAULT_SEED },
+  'tactical-replay': { mode: fuzzReplayViewerMode, movement: 'tactical', defaultSeed: TACTICAL_DEFAULT_SEED },
 };
 
 const boot = (): void => {
@@ -84,10 +86,10 @@ const boot = (): void => {
     teardownMode?.();
     const entry = MODES[modeId] ?? MODES[DEFAULT_APP_MODE_ID]!;
     // Switching to a different movement kind reloads the battle so the arena
-    // reflects the new mode immediately (same seed/level/etc.).
+    // reflects the new mode immediately, opening on that mode's default seed.
     if (entry.movement !== currentMovement) {
       currentMovement = entry.movement;
-      currentConfig = { ...currentConfig, movement: currentMovement };
+      currentConfig = { ...currentConfig, seed: entry.defaultSeed, movement: currentMovement };
       store.loadSession(bridge.startBattle(currentConfig));
     }
     teardownMode = entry.mode.mount(ctx);
