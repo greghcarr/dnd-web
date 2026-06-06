@@ -28,8 +28,16 @@ export interface AppMode {
 export const APP_MODES: ReadonlyArray<AppMode> = [
   { id: 'fuzz-replay', label: 'Fuzz Replay Viewer' },
   { id: 'tactical-replay', label: 'Tactical Duel (movement)' },
+  { id: 'interactive-duel', label: 'Interactive Duel (play)' },
 ];
 export const DEFAULT_APP_MODE_ID = 'fuzz-replay';
+
+// The interactive, player-driven duel mode. Distinct from the replay
+// viewers: it drives the engine live rather than scrubbing a finished log.
+export const INTERACTIVE_DUEL_MODE_ID = 'interactive-duel';
+// Seed the scaffold's free duel opens on (a lively tactical battle). The
+// daily run will derive its seed from the date in a later slice.
+export const DUEL_DEFAULT_SEED = 123;
 
 export type FuzzMode = '1v1' | '2v2';
 export type FuzzVsKind = 'pc' | 'monster';

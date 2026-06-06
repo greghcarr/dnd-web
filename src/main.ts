@@ -7,12 +7,21 @@ import {
   DEFAULT_MODE,
   DEFAULT_VS,
   DEFAULT_APP_MODE_ID,
+  INTERACTIVE_DUEL_MODE_ID,
+  DUEL_DEFAULT_SEED,
 } from '@/constants/app';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore } from '@/engine/replay-store';
+import { SourceRouter } from '@/engine/source-router';
+import { ArenaInteraction } from '@/phaser/interaction';
+import { DuelSession } from '@/game/duel-session';
+import { DuelController } from '@/game/duel-controller';
 import { createGame } from '@/phaser/game';
+import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 import { mountModeSelector } from '@/ui/mode-selector';
+import { mountEventInspector } from '@/ui/inspector/event-inspector';
+import { mountNarratorConsole } from '@/ui/console/narrator-console';
 import type { Mode, ModeContext } from '@/modes/mode';
 import { fuzzReplayViewerMode } from '@/modes/fuzz-replay-viewer';
 import type { FuzzMovement } from '@engine-fuzz';
@@ -66,7 +75,32 @@ const boot = (): void => {
   let currentMovement: FuzzMovement = currentConfig.movement ?? 'none';
   const store = new ReplayStore(bridge.startBattle(currentConfig));
 
-  createGame('game-root', store);
+  // The arena subscribes to the router, not a concrete store, so modes can
+  // point it at the replay store or a live duel without the scene caring.
+  const router = new SourceRouter(store);
+  // Shared channel for the live duel's cell overlay + tap input; inert until
+  // a duel sets marks and a click handler on it.
+  const interaction = new ArenaInteraction();
+  const game = createGame('game-root', router);
+  game.registry.set('interaction', interaction);
+
+  // Immersive toggle: collapse the right column to give the arena the full
+  // width (height on phones). Persisted; Phaser is told to re-fit on change.
+  const layoutEl = requireElement('layout');
+  const logsToggle = requireElement('logs-toggle');
+  const applyLogsCollapsed = (collapsed: boolean): void => {
+    layoutEl.classList.toggle('logs-collapsed', collapsed);
+    logsToggle.textContent = collapsed ? '⟨' : '⟩';
+    logsToggle.setAttribute('aria-label', collapsed ? 'Show logs' : 'Hide logs');
+    game.scale.refresh();
+  };
+  let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed);
+  applyLogsCollapsed(logsCollapsed);
+  logsToggle.addEventListener('click', () => {
+    logsCollapsed = !logsCollapsed;
+    setBoolSetting(SettingKey.LogsCollapsed, logsCollapsed);
+    applyLogsCollapsed(logsCollapsed);
+  });
 
   const ctx: ModeContext = {
     store,
@@ -82,8 +116,47 @@ const boot = (): void => {
   };
 
   let teardownMode: (() => void) | undefined;
+
+  // The interactive duel drives the engine live, so it points the arena at a
+  // fresh LiveStore rather than the shared replay store. It is distinct
+  // enough from the replay viewers to live in its own branch instead of the
+  // MODES table. (Player controls and the start screen are later slices; for
+  // now it stands up the live, set-up arena.)
+  const mountDuel = (): (() => void) => {
+    const duel = new DuelSession(bridge, { kind: 'free', seed: DUEL_DEFAULT_SEED, manualDice: false });
+    router.setSource(duel.store);
+    // Same right-column log panels as the replay viewers (battle log + event
+    // log), bound to the live store. The controls live in the command bar
+    // that overlays the arena.
+    ctx.content.innerHTML = `
+      <section id="event-inspector" class="panel" aria-label="Event log"></section>
+      <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
+    `;
+    const inspectorEl = ctx.content.querySelector<HTMLElement>('#event-inspector');
+    const narratorEl = ctx.content.querySelector<HTMLElement>('#narrator-console');
+    if (!inspectorEl || !narratorEl) throw new Error('interactive-duel: missing log panels');
+    const inspector = mountEventInspector(inspectorEl, duel.store);
+    const narrator = mountNarratorConsole(narratorEl, duel.store);
+    const controller = new DuelController(duel, interaction, requireElement('game-root'));
+    // If the enemy won initiative, this runs its turn(s) before the player's.
+    void duel.begin();
+    return () => {
+      controller.teardown();
+      inspector.unmount();
+      narrator.unmount();
+      ctx.content.replaceChildren();
+    };
+  };
+
   const switchMode = (modeId: string): void => {
     teardownMode?.();
+    if (modeId === INTERACTIVE_DUEL_MODE_ID) {
+      teardownMode = mountDuel();
+      return;
+    }
+    // Replay viewers share the scrubbed store; point the arena back at it in
+    // case we are leaving the live duel.
+    router.setSource(store);
     const entry = MODES[modeId] ?? MODES[DEFAULT_APP_MODE_ID]!;
     // Switching to a different movement kind reloads the battle so the arena
     // reflects the new mode immediately, opening on that mode's default seed.

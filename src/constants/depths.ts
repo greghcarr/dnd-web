@@ -7,5 +7,8 @@ export const RENDER_DEPTH = {
   GROUND: 0,
   GRID: 5,
   FENCE: 10,
+  // Interaction cell overlay (move/target highlights): above the ground and
+  // grid, below the depth-sorted world entities so tokens draw on top of it.
+  OVERLAY: 20,
   WORLD_BASE: 1000,
 } as const;

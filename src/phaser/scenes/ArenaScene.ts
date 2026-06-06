@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { LocationMap } from 'dnd-srd-engine';
-import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
+import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import type { FormationBounds } from '@/spatial/formation';
 import { combatantPositions, cellOf } from '@/spatial/engine-positions';
@@ -26,6 +26,17 @@ import {
 import { RENDER_DEPTH } from '@/constants/depths';
 import { GROUND_BASE_COLOR, GRID_LINE_COLOR, GRID_LINE_ALPHA } from '@/constants/colors';
 import { makeRng, type Rng } from '@/phaser/rng';
+import type { ArenaInteraction } from '@/phaser/interaction';
+import {
+  MOVE_CELL_COLOR,
+  MOVE_CELL_ALPHA,
+  MOVE_CELL_BORDER_COLOR,
+  TARGET_CELL_COLOR,
+  TARGET_CELL_ALPHA,
+  TARGET_CELL_BORDER_COLOR,
+  OVERLAY_BORDER_PX,
+  OVERLAY_BORDER_ALPHA,
+} from '@/constants/overlay';
 
 const FENCE_WOOD_DARK = 0x5b3b1f;
 const FENCE_WOOD_MED = 0x7a5230;
@@ -67,7 +78,7 @@ const expand = (bounds: FormationBounds, by: number): FormationBounds => ({
 // and one token per combatant, kept in sync with engine state at the
 // replay cursor. Rebuilds when the session changes.
 export class ArenaScene extends Phaser.Scene {
-  private store!: ReplayStore;
+  private store!: SnapshotSource;
   private readonly tokens = new Map<string, TokenView>();
   private scenery: Phaser.GameObjects.GameObject[] = [];
   private currentSession?: Session;
@@ -75,6 +86,10 @@ export class ArenaScene extends Phaser.Scene {
   private prevCursor = 0;
   private lastSnapshot?: ReplaySnapshot;
   private unsubscribe?: () => void;
+  // Interactive-duel cell overlay + tap input (absent in replay modes).
+  private interaction?: ArenaInteraction;
+  private overlay?: Phaser.GameObjects.Graphics;
+  private interactionUnsub?: () => void;
 
   constructor() {
     super('Arena');
@@ -83,10 +98,22 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
     registerCharacterAnims(this);
-    this.store = this.registry.get('store') as ReplayStore;
+    this.store = this.registry.get('store') as SnapshotSource;
     this.scale.on(Phaser.Scale.Events.RESIZE, this.reframe, this);
+    // The interaction channel is present only when a live duel is active; the
+    // overlay graphics and tap handler are inert (no marks, no handler) in
+    // replay modes.
+    this.interaction = this.registry.get('interaction') as ArenaInteraction | undefined;
+    if (this.interaction) {
+      this.overlay = this.add.graphics().setDepth(RENDER_DEPTH.OVERLAY);
+      this.interactionUnsub = this.interaction.onChange(() => this.drawOverlay());
+      this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
+      this.drawOverlay();
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
+      this.interactionUnsub?.();
+      this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.reframe, this);
     });
     this.unsubscribe = this.store.subscribe((snapshot) => this.onSnapshot(snapshot));
@@ -394,6 +421,35 @@ export class ArenaScene extends Phaser.Scene {
     } else if (event.type === 'DamageApplied') {
       this.tokens.get(event.targetId)?.flashHit();
     }
+  }
+
+  // Paint the interactive-duel cell overlay: green for reachable move cells,
+  // red for legal attack targets. Redrawn whenever the controller changes the
+  // marks; empty (cleared) in replay modes and when idle.
+  private drawOverlay(): void {
+    const g = this.overlay;
+    if (!g || !this.interaction) return;
+    g.clear();
+    for (const mark of this.interaction.getMarks()) {
+      const x = mark.col * GRID_TILE_PX;
+      const y = mark.row * GRID_TILE_PX;
+      const isMove = mark.kind === 'move';
+      g.fillStyle(isMove ? MOVE_CELL_COLOR : TARGET_CELL_COLOR, isMove ? MOVE_CELL_ALPHA : TARGET_CELL_ALPHA);
+      g.fillRect(x, y, GRID_TILE_PX, GRID_TILE_PX);
+      g.lineStyle(OVERLAY_BORDER_PX, isMove ? MOVE_CELL_BORDER_COLOR : TARGET_CELL_BORDER_COLOR, OVERLAY_BORDER_ALPHA);
+      g.strokeRect(x, y, GRID_TILE_PX, GRID_TILE_PX);
+    }
+  }
+
+  // Tap-to-act: convert a pointer (mouse or touch) to a grid cell and report
+  // it to the interaction channel, which the controller maps to a move
+  // destination or attack target.
+  private onPointerDown(pointer: Phaser.Input.Pointer): void {
+    if (!this.interaction) return;
+    const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const col = Math.floor(world.x / GRID_TILE_PX);
+    const row = Math.floor(world.y / GRID_TILE_PX);
+    this.interaction.clickCell(col, row);
   }
 
   // Resize handler: re-fit the camera to the current state (never animated).

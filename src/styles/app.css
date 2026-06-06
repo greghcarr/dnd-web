@@ -386,9 +386,142 @@ body {
   white-space: pre-wrap;
 }
 
+/* Interactive duel: command bar overlays the bottom of the map area. The
+   container ignores pointer events so taps fall through to the arena; only
+   its controls capture them. Touch-first sizing; the button row wraps. */
+#command-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(10, 12, 16, 0.92), rgba(10, 12, 16, 0));
+  pointer-events: none;
+}
+#command-bar > * {
+  pointer-events: auto;
+}
+.cmd-status {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.cmd-economy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.cmd-pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #2c7d4f;
+  color: #eafff0;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+.cmd-pip.spent {
+  background: #3a3f4a;
+  color: #6a7180;
+}
+.cmd-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.cmd-btn {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.85rem;
+  color: var(--text);
+  background: rgba(35, 40, 52, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmd-btn:hover:not(:disabled) {
+  background: #2c3340;
+}
+.cmd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cmd-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 137, 255, 0.5);
+}
+.cmd-end {
+  margin-left: 0.6rem;
+  background: rgba(74, 137, 255, 0.22);
+  border-color: var(--accent);
+}
+
+/* Immersive toggle: collapse the right column so the arena fills the full
+   width (height on phones). Sits in the arena's top-right corner. */
+#logs-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+#logs-toggle:hover {
+  background: #2c3340;
+}
+#layout.logs-collapsed {
+  grid-template-columns: 1fr 0;
+}
+#layout.logs-collapsed #right {
+  display: none;
+}
+
 /* Phones / narrow screens: stack the map on top and the panels below,
    instead of an unusable 384px side column. */
 @media (max-width: 720px) {
+  /* Bigger command-bar tap targets on touch screens. */
+  #command-bar .cmd-btn {
+    min-height: 3rem;
+    font-size: 1rem;
+  }
+  /* Collapsed: the arena fills the whole screen (single row, no panels). */
+  #layout.logs-collapsed {
+    grid-template-columns: 100%;
+    grid-template-rows: 100%;
+  }
+  #logs-toggle {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
   #layout {
     grid-template-columns: 100%;
     grid-template-rows: 42% 58%;

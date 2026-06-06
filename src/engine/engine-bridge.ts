@@ -1,4 +1,4 @@
-import { resolveContent, type ContentPack, type ResolvedContent } from 'dnd-srd-engine';
+import { resolveContent, createEngine, seededRNG, type ContentPack, type ResolvedContent, type Engine } from 'dnd-srd-engine';
 import { loadStarterPack } from 'dnd-srd-engine/starter-pack';
 import { runBattle, type FuzzVs, type FuzzMovement } from '@engine-fuzz';
 import { TEAM_SIZE_1V1, TEAM_SIZE_2V2, type FuzzMode, type FuzzVsKind } from '@/constants/app';
@@ -40,6 +40,13 @@ export class EngineBridge {
 
   getContent(): ResolvedContent {
     return this.content;
+  }
+
+  // A fresh engine instance for driving a live (player-controlled) duel:
+  // its seeded stream supplies the enemy's dice, deterministic for the daily
+  // run. Distinct from the one runBattle uses to generate the set-up.
+  createDuelEngine(seed: number): Engine {
+    return createEngine({ rng: seededRNG(seed), contentPacks: [this.pack] });
   }
 
   startBattle(config: BattleConfig): Session {
