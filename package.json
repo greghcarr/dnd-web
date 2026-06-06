@@ -1,6 +1,6 @@
 {
   "name": "dnd-web",
-  "version": "0.2.0-pre-alpha",
+  "version": "0.3.0-pre-alpha",
   "private": true,
   "type": "module",
   "description": "2D top-down RPG-style replay viewer for the dnd-srd-engine combat fuzz scenarios.",
