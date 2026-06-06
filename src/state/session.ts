@@ -1,4 +1,4 @@
-import type { Campaign, ResolvedContent } from 'dnd-srd-engine';
+import type { Campaign, ResolvedContent, LocationMap } from 'dnd-srd-engine';
 import type { FuzzBattleResult } from '@engine-fuzz';
 import type { ScrubCache } from '@/engine/scrub-cache';
 import type { NarrationLine } from '@/narrator/types';
@@ -20,4 +20,7 @@ export interface Session {
   readonly scrubCache: ScrubCache;
   readonly narration: ReadonlyArray<NarrationLine>;
   readonly formation: Formation;
+  // Present only for tactical battles: the arena's terrain grid. Its
+  // presence is what tells the arena to render cover and animate movement.
+  readonly map?: LocationMap;
 }

@@ -25,13 +25,20 @@ export interface AppMode {
   readonly id: string;
   readonly label: string;
 }
-export const APP_MODES: ReadonlyArray<AppMode> = [{ id: 'fuzz-replay', label: 'Fuzz Replay Viewer' }];
+export const APP_MODES: ReadonlyArray<AppMode> = [
+  { id: 'fuzz-replay', label: 'Fuzz Replay Viewer' },
+  { id: 'tactical-replay', label: 'Tactical Duel (movement)' },
+];
 export const DEFAULT_APP_MODE_ID = 'fuzz-replay';
 
 export type FuzzMode = '1v1' | '2v2';
 export type FuzzVsKind = 'pc' | 'monster';
 
 export const DEFAULT_SEED = 42;
+// The tactical mode opens on a livelier battle: seed 42 kites to a draw,
+// whereas this one is a decisive duel with plenty of maneuvering. 42 stays
+// the positionless default and golden test fixture.
+export const TACTICAL_DEFAULT_SEED = 123;
 export const DEFAULT_LEVEL = 1;
 export const LEVEL_MIN = 1;
 export const LEVEL_MAX = 5;

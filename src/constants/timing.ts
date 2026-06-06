@@ -5,6 +5,12 @@ export const STEP_DELAY_MS = 350;
 export const HP_TWEEN_MS = 200;
 export const HIT_FLASH_MS = 90;
 export const TOKEN_LUNGE_MS = 110;
+// How long a token takes to slide between tiles when it moves (tactical
+// mode). Only applied on a single forward step; jumps/rewinds snap.
+export const TOKEN_MOVE_MS = 260;
+// How long the follow-the-action camera takes to pan/zoom toward the
+// combatants on a single forward step; snaps instantly on jumps/rewinds.
+export const CAMERA_PAN_MS = 300;
 
 // Occasional idle blink: each token waits a random delay in this range
 // between blinks (so they desync), and a blink lasts BLINK_DURATION_MS.

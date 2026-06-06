@@ -1,10 +1,11 @@
 import { resolveContent, type ContentPack, type ResolvedContent } from 'dnd-srd-engine';
 import { loadStarterPack } from 'dnd-srd-engine/starter-pack';
-import { runBattle, type FuzzVs } from '@engine-fuzz';
+import { runBattle, type FuzzVs, type FuzzMovement } from '@engine-fuzz';
 import { TEAM_SIZE_1V1, TEAM_SIZE_2V2, type FuzzMode, type FuzzVsKind } from '@/constants/app';
 import type { Session } from '@/state/session';
 import { narrate } from '@/narrator';
-import { synthesizePositions } from '@/spatial/formation';
+import { synthesizePositions, formationFromEngine } from '@/spatial/formation';
+import { combatantPositions } from '@/spatial/engine-positions';
 import { createScrubCache, buildScrubbed } from './scrub-cache';
 import { findEncounterId } from './encounter-select';
 
@@ -13,6 +14,9 @@ export interface BattleConfig {
   readonly mode: FuzzMode;
   readonly vs: FuzzVsKind;
   readonly level: number;
+  // Omitted/`'none'` is the positionless fuzz; `'tactical'` spawns combatants
+  // on a generated map and moves them. Defaults to 'none'.
+  readonly movement?: FuzzMovement;
 }
 
 // Compile-time guard that the app's local fuzz union stays assignable to
@@ -47,10 +51,12 @@ export class EngineBridge {
       rest: 'none',
       teamSize: config.mode === '2v2' ? TEAM_SIZE_2V2 : TEAM_SIZE_1V1,
       vs: config.vs,
+      movement: config.movement ?? 'none',
     });
 
     const fullCampaign = result.campaign;
     const totalEvents = fullCampaign.events.length;
+    const encounterId = findEncounterId(fullCampaign);
 
     // Open the replay at the start of the first turn, after all setup
     // (spawns, level-ups, initiative) but before any combat action, so the
@@ -71,17 +77,38 @@ export class EngineBridge {
     scrubCache.entries.set(totalEvents, fullCampaign);
     buildScrubbed(fullCampaign, 0, scrubCache);
 
+    // Tactical battles carry a real map and starting positions; build the
+    // initial formation from the engine state at the opening cursor (after
+    // placement, before any move). Positionless battles synthesize a
+    // formation from the seed-stable team id arrays.
+    const map =
+      result.movement === 'tactical' && result.locationId
+        ? fullCampaign.state.locations[result.locationId]?.map
+        : undefined;
+    let formation;
+    if (map) {
+      const opening = buildScrubbed(fullCampaign, openingCursor, scrubCache);
+      formation = formationFromEngine(
+        combatantPositions(opening, encounterId),
+        new Set(result.teamACharacterIds),
+        map.cellSizeFeet,
+      );
+    } else {
+      formation = synthesizePositions(result.teamACharacterIds, result.teamBCharacterIds);
+    }
+
     return {
       seed: config.seed,
       fullCampaign,
       totalEvents,
       openingCursor,
-      encounterId: findEncounterId(fullCampaign),
+      encounterId,
       result,
       content: this.content,
       scrubCache,
       narration: narrate(fullCampaign.events, this.content, result.winner),
-      formation: synthesizePositions(result.teamACharacterIds, result.teamBCharacterIds),
+      formation,
+      map,
     };
   }
 }

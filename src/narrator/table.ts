@@ -60,6 +60,11 @@ const SILENT = new Set<string>([
   'SteadyAimConsumed',
   'WeaponMasteryActivated',
   'HeroPointGranted',
+  // Tactical-arena setup: the map and combatant-location wiring are not
+  // battle beats (CombatantMoved carries the readable movement).
+  'LocationCreated',
+  'CharacterLocationChanged',
+  'CombatantPlaced',
   // The choice prompt is noise; ChoiceResolved (handled in narrate) and
   // SubclassChosen carry the readable detail.
   'ChoiceRequired',
@@ -171,6 +176,8 @@ export const formatEvent = (
       return { text: `${characterName(before, e.casterId)} begins concentrating on ${tagValue(spellName(content, e.spellId))}.`, kind: 'spell' };
     case 'ConcentrationBroken':
       return { text: `${characterName(before, e.casterId)} loses concentration (${e.reason}).`, kind: 'spell' };
+    case 'CombatantMoved':
+      return { text: `${characterName(before, e.combatantId)} moves ${Math.round(e.feetTraveled)} ft.`, kind: 'info' };
     case 'Dashed':
       return { text: `${characterName(before, e.combatantId)} dashes.`, kind: 'info' };
     case 'Disengaged':

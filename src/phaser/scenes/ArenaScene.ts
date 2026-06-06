@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
+import type { LocationMap } from 'dnd-srd-engine';
 import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
 import type { Session } from '@/state/session';
 import type { FormationBounds } from '@/spatial/formation';
+import { combatantPositions, cellOf } from '@/spatial/engine-positions';
 import { TokenView } from '@/phaser/tokens/TokenView';
 import { registerCharacterAnims } from '@/phaser/anims';
-import { frameFormation } from '@/phaser/camera';
+import { frameBounds } from '@/phaser/camera';
 import {
   spriteKeyFor,
   GROUND_KEY,
@@ -31,6 +33,28 @@ const FENCE_WOOD_LIGHT = 0x9c6b3e;
 const PROP_OFFSET_X = GRID_TILE_PX * 0.5;
 const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
 
+// Tactical-arena terrain rendering, seed-deterministic for variety:
+// impassable cover blocks sight/movement (tall trees, varied), difficult
+// terrain slows (low brush), water is tinted, and open ground gets sparse
+// decorative clutter (low bushes/stones that don't block) like the fuzz
+// viewer. Only the tall trees mark real blockers, so cover stays readable.
+const COVER_PROP_KEYS = ['tree-1', 'tree-2'] as const;
+const COVER_SCALE_MIN = 0.85;
+const COVER_SCALE_MAX = 1.15;
+// The arena's outer impassable ring (contiguous with the map edge) renders
+// as a rocky border; interior impassable cells stay tree pillars. Stones
+// are small props, so scale them up into boulders.
+const BORDER_ROCK_KEYS = ['stone-1', 'stone-2', 'stone-3', 'stone-4', 'stone-5'] as const;
+const BORDER_ROCK_SCALE_MIN = 1.8;
+const BORDER_ROCK_SCALE_MAX = 2.3;
+const BRUSH_PROP_KEYS = ['bush-1', 'bush-3', 'bush-5'] as const;
+const DECOR_PROP_KEYS = ['bush-2', 'bush-4', 'stone-1', 'stone-2', 'stone-3', 'stone-4', 'stone-5'] as const;
+const TACTICAL_DECOR_PCT = 14;
+const WATER_TINT_COLOR = 0x3a6ea5;
+const WATER_TINT_ALPHA = 0.45;
+
+const pick = <T>(arr: ReadonlyArray<T>, rng: Rng): T => arr[Math.floor(rng() * arr.length)]!;
+
 const expand = (bounds: FormationBounds, by: number): FormationBounds => ({
   minCol: bounds.minCol - by,
   maxCol: bounds.maxCol + by,
@@ -49,6 +73,7 @@ export class ArenaScene extends Phaser.Scene {
   private currentSession?: Session;
   private fenceBounds?: FormationBounds;
   private prevCursor = 0;
+  private lastSnapshot?: ReplaySnapshot;
   private unsubscribe?: () => void;
 
   constructor() {
@@ -68,19 +93,23 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private onSnapshot(snapshot: ReplaySnapshot): void {
+    this.lastSnapshot = snapshot;
     if (snapshot.session !== this.currentSession) {
       this.currentSession = snapshot.session;
       this.buildForSession(snapshot.session);
       this.prevCursor = snapshot.cursor;
-      this.setStates(snapshot);
+      this.setStates(snapshot, false);
+      this.frameCamera(false);
       return;
     }
     const delta = snapshot.cursor - this.prevCursor;
     this.prevCursor = snapshot.cursor;
-    this.setStates(snapshot);
-    // Only react with attack/hurt animations on a single forward step
-    // (play or step-forward); jumps and rewinds just settle to state.
-    if (delta === 1) this.reactToEvent(snapshot);
+    // Only animate (token moves, attack/hurt reactions, camera pan) on a
+    // single forward step; jumps and rewinds settle/snap to state.
+    const animate = delta === 1;
+    this.setStates(snapshot, animate);
+    if (animate) this.reactToEvent(snapshot);
+    this.frameCamera(animate);
   }
 
   private buildForSession(session: Session): void {
@@ -89,6 +118,16 @@ export class ArenaScene extends Phaser.Scene {
     for (const object of this.scenery) object.destroy();
     this.scenery = [];
 
+    if (session.map) {
+      this.buildTacticalArena(session, session.map);
+    } else {
+      this.buildFormationArena(session);
+    }
+  }
+
+  // Positionless battles: a fenced field with random scenery around the
+  // adjacent-tile formation.
+  private buildFormationArena(session: Session): void {
     this.fenceBounds = expand(session.formation.bounds, FENCE_MARGIN_TILES);
     const rng = makeRng(session.seed);
     this.drawGround();
@@ -96,7 +135,20 @@ export class ArenaScene extends Phaser.Scene {
     this.scatterProps(session, rng);
     this.drawFence();
     this.createTokens(session);
-    this.reframe();
+  }
+
+  // Tactical battles: the engine's terrain grid, with cover drawn from the
+  // map and a fence at the map boundary. Combatants spawn at their real
+  // starting cells (the formation built from engine positions).
+  private buildTacticalArena(session: Session, map: LocationMap): void {
+    this.fenceBounds = { minCol: 0, maxCol: map.widthCells - 1, minRow: 0, maxRow: map.heightCells - 1 };
+    const rng = makeRng(session.seed);
+    this.drawGround();
+    if (SHOW_GRID) this.drawGrid();
+    this.drawTerrain(map, rng);
+    this.scatterTacticalDecor(session, map, rng);
+    // No wooden fence: the arena's rock border is its boundary.
+    this.createTokens(session);
   }
 
   private drawGround(): void {
@@ -160,6 +212,115 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  // Draw the tactical map's terrain, varied per seed: impassable cells get a
+  // tall blocker (so cover/LoS reads correctly), difficult cells low brush,
+  // water a tint. Cover stays centred on its cell so it maps 1:1 to the
+  // blocked tile.
+  private drawTerrain(map: LocationMap, rng: Rng): void {
+    const border = this.borderImpassable(map);
+    for (let row = 0; row < map.heightCells; row++) {
+      for (let col = 0; col < map.widthCells; col++) {
+        const terrain = map.terrain[row]?.[col];
+        if (terrain === 'impassable') {
+          if (border.has(`${col},${row}`)) {
+            this.placeProp(pick(BORDER_ROCK_KEYS, rng), col, row, {
+              flip: rng() < 0.5,
+              scale: BORDER_ROCK_SCALE_MIN + rng() * (BORDER_ROCK_SCALE_MAX - BORDER_ROCK_SCALE_MIN),
+            });
+          } else {
+            this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
+              flip: rng() < 0.5,
+              scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
+            });
+          }
+        } else if (terrain === 'difficult') {
+          this.placeProp(pick(BRUSH_PROP_KEYS, rng), col, row, { flip: rng() < 0.5 });
+        } else if (terrain === 'water') {
+          this.tintCell(col, row, WATER_TINT_COLOR, WATER_TINT_ALPHA);
+        }
+      }
+    }
+  }
+
+  // Impassable cells reachable from the map edge through other impassable
+  // cells: the arena's outer wall. Interior pillars and fenced pens aren't
+  // edge-connected, so they fall outside this set and render as trees.
+  private borderImpassable(map: LocationMap): Set<string> {
+    const W = map.widthCells;
+    const H = map.heightCells;
+    const imp = (c: number, r: number): boolean => map.terrain[r]?.[c] === 'impassable';
+    const seen = new Set<string>();
+    const stack: Array<[number, number]> = [];
+    const seed = (c: number, r: number): void => {
+      const k = `${c},${r}`;
+      if (imp(c, r) && !seen.has(k)) {
+        seen.add(k);
+        stack.push([c, r]);
+      }
+    };
+    for (let c = 0; c < W; c++) {
+      seed(c, 0);
+      seed(c, H - 1);
+    }
+    for (let r = 0; r < H; r++) {
+      seed(0, r);
+      seed(W - 1, r);
+    }
+    while (stack.length > 0) {
+      const [c, r] = stack.pop()!;
+      seed(c + 1, r);
+      seed(c - 1, r);
+      seed(c, r + 1);
+      seed(c, r - 1);
+    }
+    return seen;
+  }
+
+  // Sparse, seed-deterministic ground clutter on open (normal) cells, like
+  // the fuzz viewer's scatter. Low props only (bushes/stones) so they read
+  // as passable decor, never confused with the blocking cover. Kept off the
+  // combatants' starting cells.
+  private scatterTacticalDecor(session: Session, map: LocationMap, rng: Rng): void {
+    const spawn = new Set<string>();
+    for (const { col, row } of session.formation.placements.values()) spawn.add(`${col},${row}`);
+    for (let row = 1; row < map.heightCells - 1; row++) {
+      for (let col = 1; col < map.widthCells - 1; col++) {
+        if (map.terrain[row]?.[col] !== 'normal') continue;
+        if (spawn.has(`${col},${row}`)) continue;
+        if (rng() * 100 >= TACTICAL_DECOR_PCT) continue;
+        this.placeProp(pick(DECOR_PROP_KEYS, rng), col, row, {
+          flip: rng() < 0.5,
+          offsetX: (rng() - 0.5) * PROP_OFFSET_X,
+          offsetY: (rng() - 0.5) * PROP_OFFSET_Y,
+        });
+      }
+    }
+  }
+
+  private placeProp(
+    key: string,
+    col: number,
+    row: number,
+    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number } = {},
+  ): void {
+    const spec = PROP_SPECS.find((s) => s.key === key);
+    if (!spec) return;
+    const x = (col + 0.5) * GRID_TILE_PX + (opts.offsetX ?? 0);
+    const y = (row + TILE_GROUND_FRAC) * GRID_TILE_PX + (opts.offsetY ?? 0);
+    const prop = this.add.image(x, y, spec.key).setOrigin(0.5, 1);
+    prop.setScale((spec.heightTiles * (opts.scale ?? 1) * GRID_TILE_PX) / prop.height);
+    if (opts.flip) prop.setFlipX(true);
+    prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
+    this.scenery.push(prop);
+  }
+
+  private tintCell(col: number, row: number, color: number, alpha: number): void {
+    const tint = this.add
+      .rectangle((col + 0.5) * GRID_TILE_PX, (row + 0.5) * GRID_TILE_PX, GRID_TILE_PX, GRID_TILE_PX, color, alpha)
+      .setDepth(RENDER_DEPTH.GROUND + 1);
+    this.scenery.push(tint);
+  }
+
   private drawFence(): void {
     const fence = this.fenceBounds!;
     const left = fence.minCol * GRID_TILE_PX;
@@ -203,12 +364,23 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  private setStates(snapshot: ReplaySnapshot): void {
+  private setStates(snapshot: ReplaySnapshot, animateMoves: boolean): void {
     const { campaign, session } = snapshot;
     const encounter = campaign.state.encounters[session.encounterId];
     const activeId = encounter?.combatants[encounter.activeIndex]?.combatantId;
     for (const [id, token] of this.tokens) {
       token.setState(campaign.state.characters[id], id === activeId);
+    }
+    // Tactical: reflect each combatant's position at the cursor. moveTo
+    // no-ops when the tile is unchanged, so only real moves animate/snap.
+    if (!session.map) return;
+    const cellSize = session.map.cellSizeFeet;
+    for (const combatant of combatantPositions(campaign, session.encounterId)) {
+      if (!combatant.position) continue;
+      const token = this.tokens.get(combatant.combatantId);
+      if (!token) continue;
+      const { col, row } = cellOf(combatant.position, cellSize);
+      token.moveTo(col, row, animateMoves);
     }
   }
 
@@ -224,9 +396,52 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  // Resize handler: re-fit the camera to the current state (never animated).
   private reframe(): void {
-    // Frame the combatants (not the whole fence) so they fill the screen.
-    if (this.currentSession) frameFormation(this.cameras.main, this.currentSession.formation.bounds);
+    this.frameCamera(false);
+  }
+
+  private frameCamera(animate: boolean): void {
+    const session = this.currentSession;
+    if (!session) return;
+    if (session.map) {
+      this.frameTactical(session.map, animate);
+    } else {
+      // Positionless: static framing of the adjacent-tile formation.
+      frameBounds(this.cameras.main, session.formation.bounds, false);
+    }
+  }
+
+  // Follow the action: frame the living combatants at the current cursor
+  // (so a felled combatant doesn't drag the view), falling back to the whole
+  // map if none are standing.
+  private frameTactical(map: LocationMap, animate: boolean): void {
+    const snapshot = this.lastSnapshot;
+    const session = this.currentSession;
+    if (!snapshot || !session) return;
+    const cellSize = map.cellSizeFeet;
+    let bounds: FormationBounds | undefined;
+    for (const combatant of combatantPositions(snapshot.campaign, session.encounterId)) {
+      if (!combatant.position) continue;
+      const character = snapshot.campaign.state.characters[combatant.combatantId];
+      if (character && character.hp.current <= 0) continue;
+      const { col, row } = cellOf(combatant.position, cellSize);
+      bounds = bounds
+        ? {
+            minCol: Math.min(bounds.minCol, col),
+            maxCol: Math.max(bounds.maxCol, col),
+            minRow: Math.min(bounds.minRow, row),
+            maxRow: Math.max(bounds.maxRow, row),
+          }
+        : { minCol: col, maxCol: col, minRow: row, maxRow: row };
+    }
+    const target = bounds ?? {
+      minCol: 0,
+      maxCol: map.widthCells - 1,
+      minRow: 0,
+      maxRow: map.heightCells - 1,
+    };
+    frameBounds(this.cameras.main, target, animate);
   }
 }
 
