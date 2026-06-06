@@ -26,13 +26,17 @@ const enginePkg = readJson(resolve(ENGINE_ROOT, 'package.json'));
 let engineSha = 'unknown';
 try {
   engineSha = execSync(`git -C "${ENGINE_ROOT}" rev-parse --short HEAD`, { encoding: 'utf8' }).trim();
-  // Append '+dirty' when the engine working tree has uncommitted
+  // Append '+dirty' when the engine working tree has uncommitted SOURCE
   // changes. Catches the "I demoed a local build that secretly used
-  // unpushed engine code" failure mode -- the deployed bundle will
-  // ship the engine's committed state, but the badge here shows
-  // what's actually in THIS bundle. In CI the engine is freshly
-  // checked out and clean, so '+dirty' never appears in deploys.
-  const dirty = execSync(`git -C "${ENGINE_ROOT}" status --porcelain`, { encoding: 'utf8' }).trim();
+  // unpushed engine code" failure mode -- the deployed bundle ships the
+  // engine's committed state, but the badge shows what's actually in THIS
+  // bundle. package-lock.json is excluded: the deploy workflow runs
+  // `npm install` in the freshly checked-out engine, which rewrites the
+  // tracked lockfile, and that install churn is not real source dirtiness.
+  const dirty = execSync(`git -C "${ENGINE_ROOT}" status --porcelain`, { encoding: 'utf8' })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.endsWith('package-lock.json'));
   if (dirty.length > 0) engineSha += '+dirty';
 } catch {
   // engine isn't a git checkout; leave as 'unknown'
