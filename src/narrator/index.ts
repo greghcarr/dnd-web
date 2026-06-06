@@ -77,10 +77,13 @@ export const narrate = (
       const targetName = characterName(before[i]!, e.targetId);
       const weapon = weaponLabel(before[i]!, content, e.weaponInstanceId);
       const withWeapon = weapon !== undefined ? ` with ${weapon}` : '';
+      // Opportunity attacks (reactions on a foe leaving reach) read as normal
+      // attacks otherwise; label them so the log shows them as such.
+      const oa = e.isOpportunityAttack ? 'Opportunity attack: ' : '';
       if (!e.hit) {
         lines.push({
           eventIndex: i,
-          text: `${attacker} attacks ${targetName}${withWeapon} but misses.`,
+          text: `${oa}${attacker} attacks ${targetName}${withWeapon} but misses.`,
           kind: 'miss',
         });
         consumed.add(i);
@@ -88,7 +91,7 @@ export const narrate = (
       }
       const j = nextDamageApplied(i, e.targetId);
       if (j === undefined) {
-        lines.push({ eventIndex: i, text: `${attacker} hits ${targetName}${withWeapon}.`, kind: 'hit' });
+        lines.push({ eventIndex: i, text: `${oa}${attacker} hits ${targetName}${withWeapon}.`, kind: 'hit' });
         consumed.add(i);
         continue;
       }
@@ -98,7 +101,7 @@ export const narrate = (
       lines.push({
         eventIndex: j,
         attackEventIndex: i,
-        text: `${crit}${attacker} hits ${targetName} for ${tagValue(`${total} ${types}`)}${withWeapon}.${hp}`,
+        text: `${oa}${crit}${attacker} hits ${targetName} for ${tagValue(`${total} ${types}`)}${withWeapon}.${hp}`,
         kind: 'hit',
       });
       consumed.add(i);
