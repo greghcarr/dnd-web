@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
-import type { ReplayStore } from '@/engine/replay-store';
+import type { SnapshotSource } from '@/engine/snapshot-source';
 import { BootScene } from './scenes/BootScene';
 import { GROUND_BASE_COLOR, cssHex } from '@/constants/colors';
 
-// Creates the full-screen Phaser game and stashes the replay store in the
-// game registry so scenes can subscribe to cursor changes.
-export const createGame = (parent: string, store: ReplayStore): Phaser.Game => {
+// Creates the full-screen Phaser game and stashes the snapshot source in
+// the game registry so scenes can subscribe to frame changes. The source is
+// either the ReplayStore (scrubbed log) or the live duel's LiveStore.
+export const createGame = (parent: string, store: SnapshotSource): Phaser.Game => {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,

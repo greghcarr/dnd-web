@@ -3,7 +3,7 @@
 // stepping the transport reveals the story one beat at a time. Follows
 // the tail like the inspector.
 
-import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
+import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import type { NarrationLine } from '@/narrator/types';
 import { splitNarration } from '@/narrator/resolve';
@@ -53,7 +53,7 @@ const visibleCount = (narration: ReadonlyArray<NarrationLine>, cursor: number): 
   return count;
 };
 
-export const mountNarratorConsole = (root: HTMLElement, store: ReplayStore): NarratorConsole => {
+export const mountNarratorConsole = (root: HTMLElement, store: SnapshotSource): NarratorConsole => {
   root.innerHTML = `
     <div class="panel-header">${collapseToggleHtml('Battle log')}</div>
     <div class="panel-scroll narrator-scroll">
