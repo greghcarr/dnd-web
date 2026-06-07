@@ -38,6 +38,10 @@ export class DuelController {
     this.bar = mountCommandBar(gameRoot, {
       onMove: () => this.toggleSelect('move'),
       onAttack: () => this.toggleSelect('attack'),
+      onUndo: () => {
+        this.clearSelection();
+        this.duel.undo();
+      },
       onEndTurn: () => {
         this.clearSelection();
         void this.duel.endTurn();
@@ -125,6 +129,7 @@ export class DuelController {
       reaction: economy?.reactionAvailable ?? false,
       canMove: phase === 'player' && this.duel.moveDestinations().length > 0,
       canAttack: phase === 'player' && this.duel.attackTargets().length > 0 && (economy?.actionAvailable ?? false),
+      canUndo: this.duel.canUndo(),
       selecting: this.selecting,
     });
   }

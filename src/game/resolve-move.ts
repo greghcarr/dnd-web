@@ -13,9 +13,10 @@ export const resolveMove = (
   start: Campaign,
   moverId: string,
   to: Cell,
-): { readonly events: readonly Event[]; readonly campaign: Campaign } => {
+): { readonly events: readonly Event[]; readonly campaign: Campaign; readonly provokedAttack: boolean } => {
   let campaign = start;
   const events: Event[] = [];
+  let provokedAttack = false;
   const push = (produced: readonly Event[]): void => {
     if (produced.length === 0) return;
     campaign = engine.commit(campaign, produced);
@@ -35,7 +36,8 @@ export const resolveMove = (
         weaponInstanceId: weapon,
       }).events,
     );
+    provokedAttack = true;
   }
 
-  return { events, campaign };
+  return { events, campaign, provokedAttack };
 };

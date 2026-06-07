@@ -1,4 +1,4 @@
-import type { Engine } from 'dnd-srd-engine';
+import type { Engine, Campaign } from 'dnd-srd-engine';
 import type { EngineBridge } from '@/engine/engine-bridge';
 import { LiveStore } from '@/engine/live-store';
 import { buildScrubbed, createScrubCache } from '@/engine/scrub-cache';
@@ -43,6 +43,11 @@ export class DuelSession {
   private readonly encounterId: string;
   private readonly listeners = new Set<() => void>();
   private busy = false;
+  // Whole-turn pending undo (Into the Breach model): each clean move pushes
+  // the pre-move campaign so it can be rewound to. Rolling dice this turn (an
+  // attack, or a move that provokes an opportunity attack) locks undo.
+  private undoStack: Campaign[] = [];
+  private diceRolledThisTurn = false;
 
   constructor(
     bridge: EngineBridge,
@@ -127,10 +132,18 @@ export class DuelSession {
     if (this.phase() !== 'player') return;
     this.busy = true;
     this.notify();
-    const moved = resolveMove(this.engine, this.store.currentTail, this.playerId, to);
+    const base = this.store.currentTail;
+    const moved = resolveMove(this.engine, base, this.playerId, to);
     this.store.append(moved.events);
     await playToTail(this.store);
     this.busy = false;
+    if (moved.provokedAttack) {
+      // The move drew an opportunity attack (dice), which locks undo.
+      this.diceRolledThisTurn = true;
+      this.undoStack = [];
+    } else if (!this.diceRolledThisTurn) {
+      this.undoStack.push(base);
+    }
     this.notify();
   }
 
@@ -152,6 +165,9 @@ export class DuelSession {
     this.store.append(attack.events);
     await playToTail(this.store);
     this.busy = false;
+    // The attack rolled dice; that locks undo for the rest of the turn.
+    this.diceRolledThisTurn = true;
+    this.undoStack = [];
     this.notify();
   }
 
@@ -161,6 +177,7 @@ export class DuelSession {
     this.busy = true;
     this.notify();
     await this.runUntilPlayerActs();
+    this.resetTurnUndo();
     this.busy = false;
     this.notify();
   }
@@ -171,8 +188,28 @@ export class DuelSession {
     this.notify();
     await this.advance(false);
     await this.runUntilPlayerActs();
+    this.resetTurnUndo();
     this.busy = false;
     this.notify();
+  }
+
+  // Undo is available for clean (dice-free) moves made this turn, until the
+  // player rolls dice (an attack, or a move that provoked an opportunity
+  // attack), which locks the turn.
+  canUndo(): boolean {
+    return this.phase() === 'player' && this.undoStack.length > 0;
+  }
+
+  undo(): void {
+    if (!this.canUndo()) return;
+    const previous = this.undoStack.pop()!;
+    this.store.rewindTo(previous);
+    this.notify();
+  }
+
+  private resetTurnUndo(): void {
+    this.undoStack = [];
+    this.diceRolledThisTurn = false;
   }
 
   // Drive the enemy's turns, and auto-pass the player's own turns while they
