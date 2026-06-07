@@ -2,6 +2,7 @@ import type { DuelSession, DuelPhase } from './duel-session';
 import type { DuelOutcome } from './outcome';
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
+import { mountEndScreen, type EndScreen } from '@/ui/end-screen';
 import { cellOf } from '@/spatial/engine-positions';
 
 // Ties the live duel together: the command bar (DOM) issues intents, the
@@ -25,22 +26,22 @@ const statusText = (phase: DuelPhase, outcome: DuelOutcome): string => {
 export class DuelController {
   private selecting: 'move' | 'attack' | null = null;
   private readonly bar: CommandBar;
+  private endScreen?: EndScreen;
   private readonly unsubscribeDuel: () => void;
 
   constructor(
     private readonly duel: DuelSession,
     private readonly interaction: ArenaInteraction,
-    barParent: HTMLElement,
-    onNewDuel: () => void,
+    private readonly gameRoot: HTMLElement,
+    private readonly onNewDuel: () => void,
   ) {
-    this.bar = mountCommandBar(barParent, {
+    this.bar = mountCommandBar(gameRoot, {
       onMove: () => this.toggleSelect('move'),
       onAttack: () => this.toggleSelect('attack'),
       onEndTurn: () => {
         this.clearSelection();
         void this.duel.endTurn();
       },
-      onNewDuel,
     });
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
     this.unsubscribeDuel = this.duel.onChange(() => this.refresh());
@@ -51,6 +52,7 @@ export class DuelController {
     this.unsubscribeDuel();
     this.interaction.setClickHandler(undefined);
     this.interaction.clearMarks();
+    this.endScreen?.unmount();
     this.bar.unmount();
   }
 
@@ -108,6 +110,10 @@ export class DuelController {
 
   private refresh(): void {
     const phase = this.duel.phase();
+    // Show the Victory/Defeat screen once the duel ends.
+    if (phase === 'over' && !this.endScreen) {
+      this.endScreen = mountEndScreen(this.gameRoot, this.duel.outcome(), this.onNewDuel);
+    }
     if (phase !== 'player') this.clearSelection();
     const economy = this.duel.economy();
     this.bar.render({

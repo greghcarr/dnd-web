@@ -21,7 +21,6 @@ export interface CommandBarHandlers {
   readonly onMove: () => void;
   readonly onAttack: () => void;
   readonly onEndTurn: () => void;
-  readonly onNewDuel: () => void;
 }
 
 export interface CommandBar {
@@ -50,7 +49,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       <button type="button" class="cmd-btn" disabled>Spells</button>
       <button type="button" class="cmd-btn" disabled>Items</button>
       <button type="button" class="cmd-btn cmd-end" data-cmd="end">End Turn</button>
-      <button type="button" class="cmd-btn cmd-new" data-cmd="new">New Duel</button>
     </div>
   `;
   parent.appendChild(bar);
@@ -63,7 +61,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const moveBtn = select<HTMLButtonElement>('[data-cmd="move"]');
   const attackBtn = select<HTMLButtonElement>('[data-cmd="attack"]');
   const endBtn = select<HTMLButtonElement>('[data-cmd="end"]');
-  const newBtn = select<HTMLButtonElement>('[data-cmd="new"]');
   const phaseEl = select('.cmd-phase');
   const moveLeftEl = select('.cmd-move-left');
   const actionPip = select('[data-pip="action"]');
@@ -73,13 +70,9 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   moveBtn.addEventListener('click', handlers.onMove);
   attackBtn.addEventListener('click', handlers.onAttack);
   endBtn.addEventListener('click', handlers.onEndTurn);
-  newBtn.addEventListener('click', handlers.onNewDuel);
 
   return {
     render(view: CommandBarView): void {
-      // When the duel is over, the bar swaps the action buttons for New Duel
-      // (CSS keys off this class).
-      bar.classList.toggle('over', view.phase === 'over');
       phaseEl.textContent = view.statusText;
       moveLeftEl.textContent = view.movementText;
       actionPip.classList.toggle('spent', !view.action);

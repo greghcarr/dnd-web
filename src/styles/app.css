@@ -472,19 +472,6 @@ body {
   background: rgba(74, 137, 255, 0.22);
   border-color: var(--accent);
 }
-/* On game over the bar swaps its action buttons for New Duel. */
-.cmd-new {
-  display: none;
-  margin-left: 0.6rem;
-  background: rgba(74, 137, 255, 0.22);
-  border-color: var(--accent);
-}
-#command-bar.over .cmd-btn:not(.cmd-new) {
-  display: none;
-}
-#command-bar.over .cmd-new {
-  display: inline-flex;
-}
 
 /* Immersive toggle: collapse the right column so the arena fills the full
    width (height on phones). Sits in the arena's top-right corner. */
@@ -625,6 +612,44 @@ body {
   border-color: var(--accent);
 }
 
+/* Post-duel Victory / Defeat screen. */
+#end-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.78);
+}
+.end-card {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.6rem 1.5rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+.end-title {
+  margin: 0;
+  font-size: 2rem;
+}
+.end-victory {
+  color: #b6f0c0;
+}
+.end-defeat {
+  color: #ff8e7a;
+}
+.end-note {
+  margin: 0;
+  color: var(--text-dim);
+}
+
 /* Manual-dice prompt: a small modal over the arena, one die at a time. */
 #dice-prompt {
   position: absolute;
@@ -717,10 +742,11 @@ body {
     width: 2.6rem;
     height: 2.6rem;
   }
-  /* The start menu and dice prompt fill the whole phone screen (not just the
-     42% map row), so the cards have room and aren't clipped by the panels. */
+  /* The menus and prompts fill the whole phone screen (not just the 42% map
+     row), so the cards have room and aren't clipped by the panels. */
   #start-screen,
-  #dice-prompt {
+  #dice-prompt,
+  #end-screen {
     position: fixed;
   }
   #layout {

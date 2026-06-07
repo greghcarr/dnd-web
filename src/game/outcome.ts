@@ -2,27 +2,33 @@ import type { Campaign } from 'dnd-srd-engine';
 
 export type DuelOutcome = 'ongoing' | 'victory' | 'defeat';
 
-// Win/loss from the player's perspective. MVP: a combatant at 0 HP is out.
-// The full death-save flow (a downed player isn't dead until three failed
-// saves) is a later slice; until then 0 HP ends the duel.
-export const duelOutcome = (
-  state: Campaign['state'],
-  playerId: string,
-  enemyId: string,
-): DuelOutcome => {
-  const standing = (id: string): boolean => (state.characters[id]?.hp.current ?? 0) > 0;
-  if (!standing(enemyId)) return 'victory';
-  if (!standing(playerId)) return 'defeat';
+type State = Campaign['state'];
+
+const DEATH_SAVE_FAILURES_TO_DIE = 3;
+
+// Knocked to 0 HP (unconscious / out of the fight), whether dying or stable.
+const isDown = (state: State, id: string): boolean => (state.characters[id]?.hp.current ?? 0) <= 0;
+
+// Truly dead: three failed death saves, or damage past the negative-max
+// threshold. A downed-but-not-dead combatant is still in the duel.
+const isDead = (state: State, id: string): boolean => {
+  const character = state.characters[id];
+  if (!character) return true;
+  return character.deathSaves.failures >= DEATH_SAVE_FAILURES_TO_DIE || character.hp.current <= -character.hp.max;
+};
+
+// Win/loss from the player's perspective. Dropping the enemy (a knockout)
+// decides the duel; the player only loses on actual death, so a downed player
+// keeps making death saves until they die or the enemy is felled.
+export const duelOutcome = (state: State, playerId: string, enemyId: string): DuelOutcome => {
+  if (isDown(state, enemyId)) return 'victory';
+  if (isDead(state, playerId)) return 'defeat';
   return 'ongoing';
 };
 
 // The winning combatant's id (for the narrator's end line), or undefined
 // while the duel is ongoing.
-export const winnerId = (
-  state: Campaign['state'],
-  playerId: string,
-  enemyId: string,
-): string | undefined => {
+export const winnerId = (state: State, playerId: string, enemyId: string): string | undefined => {
   const result = duelOutcome(state, playerId, enemyId);
   if (result === 'victory') return playerId;
   if (result === 'defeat') return enemyId;

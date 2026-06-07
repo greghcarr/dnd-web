@@ -22,9 +22,10 @@ type Position = MoveDestination['position'];
 
 export type DuelPhase = 'player' | 'busy' | 'enemy' | 'over';
 
-// Safety bound on the enemy turn loop (a human turn is unbounded; this only
-// guards the AI side against a non-terminating policy).
-const MAX_ENEMY_TURNS = 100;
+// Safety bound on the auto-driven loop (enemy turns + the player's own downed
+// death-save turns). A human's live turn is unbounded; this only guards the
+// automatic side against a non-terminating policy.
+const MAX_AUTO_TURNS = 100;
 
 // A live, player-driven tactical duel. Reuses the engine's tactical
 // generation (via the bridge) for the map + roster, branches the campaign at
@@ -154,16 +155,12 @@ export class DuelSession {
     this.notify();
   }
 
-  // Kick off the duel: if the enemy won initiative, run its turn(s) until it
-  // is the player's turn (or the duel is over). Called once on mount.
+  // Kick off the duel: drive AI (and, if the enemy won initiative, its
+  // turn(s)) until it is the player's turn to act. Called once on mount.
   async begin(): Promise<void> {
-    if (this.outcome() !== 'ongoing' || this.activeId() === this.playerId) {
-      this.notify();
-      return;
-    }
     this.busy = true;
     this.notify();
-    await this.runEnemyTurns();
+    await this.runUntilPlayerActs();
     this.busy = false;
     this.notify();
   }
@@ -172,30 +169,54 @@ export class DuelSession {
     if (this.phase() !== 'player') return;
     this.busy = true;
     this.notify();
-    await this.advance();
-    await this.runEnemyTurns();
+    await this.advance(false);
+    await this.runUntilPlayerActs();
     this.busy = false;
     this.notify();
   }
 
-  // Run AI turns until control returns to the player or the duel ends.
-  private async runEnemyTurns(): Promise<void> {
+  // Drive the enemy's turns, and auto-pass the player's own turns while they
+  // are downed (the engine rolls their death save on the way in), until the
+  // player can act again or the duel ends.
+  private async runUntilPlayerActs(): Promise<void> {
     let guard = 0;
-    while (this.outcome() === 'ongoing' && this.activeId() !== this.playerId && guard < MAX_ENEMY_TURNS) {
+    while (this.outcome() === 'ongoing' && guard < MAX_AUTO_TURNS) {
       guard += 1;
-      const active = this.activeId()!;
-      const foe = active === this.playerId ? this.enemyId : this.playerId;
-      this.store.append(planEnemyTurn(this.engine, this.store.currentTail, this.encounterId, active, foe));
+      const active = this.activeId();
+      if (active === undefined) break;
+      if (active === this.playerId) {
+        if (this.playerCanAct()) return;
+        await this.advance(false); // unconscious player: pass to the enemy
+        continue;
+      }
+      this.store.append(planEnemyTurn(this.engine, this.store.currentTail, this.encounterId, active, this.playerId));
       await playToTail(this.store);
       if (this.outcome() !== 'ongoing') break;
-      await this.advance();
+      // Advancing into the player's turn rolls their death save when they are
+      // down; route it through their dice (a manual prompt) if one is pending.
+      await this.advance(this.playerDeathSavePending());
     }
   }
 
-  private async advance(): Promise<void> {
-    const advance = this.engine.plan.advanceTurn(this.store.currentTail.state, { encounterId: this.encounterId });
-    this.store.append(advance.events);
+  // Advance the turn. `rollAsPlayer` routes any roll the advance makes (a
+  // downed player's death save) through the player's dice source; otherwise
+  // the engine rolls. For a PC duel the only roll an advance makes is that
+  // death save, so the routing stays precise.
+  private async advance(rollAsPlayer: boolean): Promise<void> {
+    const plan = () => this.engine.plan.advanceTurn(this.store.currentTail.state, { encounterId: this.encounterId });
+    const result = rollAsPlayer ? await this.dice.resolve(plan) : plan();
+    this.store.append(result.events);
     await playToTail(this.store);
+  }
+
+  private playerCanAct(): boolean {
+    const player = this.store.currentTail.state.characters[this.playerId];
+    return !!player && player.hp.current > 0;
+  }
+
+  private playerDeathSavePending(): boolean {
+    const player = this.store.currentTail.state.characters[this.playerId];
+    return !!player && player.hp.current <= 0 && !player.deathSaves.stable && player.deathSaves.failures < 3;
   }
 
   private notify(): void {
