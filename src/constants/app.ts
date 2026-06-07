@@ -30,7 +30,7 @@ export const APP_MODES: ReadonlyArray<AppMode> = [
   { id: 'tactical-replay', label: 'Tactical Duel (movement)' },
   { id: 'interactive-duel', label: 'Interactive Duel (play)' },
 ];
-export const DEFAULT_APP_MODE_ID = 'fuzz-replay';
+export const DEFAULT_APP_MODE_ID = 'interactive-duel';
 
 // The interactive, player-driven duel mode. Distinct from the replay
 // viewers: it drives the engine live rather than scrubbing a finished log.
