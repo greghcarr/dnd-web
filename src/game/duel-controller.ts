@@ -31,6 +31,7 @@ export class DuelController {
     private readonly duel: DuelSession,
     private readonly interaction: ArenaInteraction,
     barParent: HTMLElement,
+    onNewDuel: () => void,
   ) {
     this.bar = mountCommandBar(barParent, {
       onMove: () => this.toggleSelect('move'),
@@ -39,6 +40,7 @@ export class DuelController {
         this.clearSelection();
         void this.duel.endTurn();
       },
+      onNewDuel,
     });
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
     this.unsubscribeDuel = this.duel.onChange(() => this.refresh());

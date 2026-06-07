@@ -8,7 +8,6 @@ import {
   DEFAULT_VS,
   DEFAULT_APP_MODE_ID,
   INTERACTIVE_DUEL_MODE_ID,
-  DUEL_DEFAULT_SEED,
 } from '@/constants/app';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
@@ -17,6 +16,8 @@ import { SourceRouter } from '@/engine/source-router';
 import { ArenaInteraction } from '@/phaser/interaction';
 import { DuelSession } from '@/game/duel-session';
 import { DuelController } from '@/game/duel-controller';
+import type { RunConfig } from '@/game/run-config';
+import { mountStartScreen } from '@/ui/start-screen';
 import { createGame } from '@/phaser/game';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 import { mountModeSelector } from '@/ui/mode-selector';
@@ -123,29 +124,55 @@ const boot = (): void => {
   // MODES table. (Player controls and the start screen are later slices; for
   // now it stands up the live, set-up arena.)
   const mountDuel = (): (() => void) => {
-    const duel = new DuelSession(bridge, { kind: 'free', seed: DUEL_DEFAULT_SEED, manualDice: false });
-    router.setSource(duel.store);
-    // Same right-column log panels as the replay viewers (battle log + event
-    // log), bound to the live store. The controls live in the command bar
-    // that overlays the arena.
-    ctx.content.innerHTML = `
-      <section id="event-inspector" class="panel" aria-label="Event log"></section>
-      <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
-    `;
-    const inspectorEl = ctx.content.querySelector<HTMLElement>('#event-inspector');
-    const narratorEl = ctx.content.querySelector<HTMLElement>('#narrator-console');
-    if (!inspectorEl || !narratorEl) throw new Error('interactive-duel: missing log panels');
-    const inspector = mountEventInspector(inspectorEl, duel.store);
-    const narrator = mountNarratorConsole(narratorEl, duel.store);
-    const controller = new DuelController(duel, interaction, requireElement('game-root'));
-    // If the enemy won initiative, this runs its turn(s) before the player's.
-    void duel.begin();
-    return () => {
-      controller.teardown();
-      inspector.unmount();
-      narrator.unmount();
-      ctx.content.replaceChildren();
-    };
+    const gameRoot = requireElement('game-root');
+    // Either the start screen or a running duel is active at a time; this
+    // tears down whichever it is when the mode unmounts.
+    let teardownActive: () => void = () => {};
+
+    // Pre-duel menu: choose Daily / Free, then begin.
+    function showStart(): void {
+      const start = mountStartScreen(gameRoot, (config) => {
+        start.unmount();
+        teardownActive = runDuel(config);
+      });
+      teardownActive = () => start.unmount();
+    }
+
+    // A running duel: live store + right-column logs (same as the replay
+    // viewers) + the command bar overlaying the arena. "New Duel" (shown on
+    // game over) returns to the start screen.
+    function runDuel(config: RunConfig): () => void {
+      const duel = new DuelSession(bridge, config);
+      router.setSource(duel.store);
+      ctx.content.innerHTML = `
+        <section id="event-inspector" class="panel" aria-label="Event log"></section>
+        <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
+      `;
+      const inspectorEl = ctx.content.querySelector<HTMLElement>('#event-inspector');
+      const narratorEl = ctx.content.querySelector<HTMLElement>('#narrator-console');
+      if (!inspectorEl || !narratorEl) throw new Error('interactive-duel: missing log panels');
+      const inspector = mountEventInspector(inspectorEl, duel.store);
+      const narrator = mountNarratorConsole(narratorEl, duel.store);
+      const cleanup = (): void => {
+        inspector.unmount();
+        narrator.unmount();
+        ctx.content.replaceChildren();
+      };
+      const controller = new DuelController(duel, interaction, gameRoot, () => {
+        controller.teardown();
+        cleanup();
+        showStart();
+      });
+      // If the enemy won initiative, this runs its turn(s) before the player's.
+      void duel.begin();
+      return () => {
+        controller.teardown();
+        cleanup();
+      };
+    }
+
+    showStart();
+    return () => teardownActive();
   };
 
   const switchMode = (modeId: string): void => {
