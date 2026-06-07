@@ -15,6 +15,8 @@ export interface CommandBarView {
   readonly canMove: boolean;
   readonly canAttack: boolean;
   readonly canActions: boolean;
+  readonly canBonus: boolean;
+  readonly canSpells: boolean;
   readonly canUndo: boolean;
   readonly selecting: 'move' | 'attack' | null;
 }
@@ -23,6 +25,8 @@ export interface CommandBarHandlers {
   readonly onMove: () => void;
   readonly onAttack: () => void;
   readonly onActions: () => void;
+  readonly onBonus: () => void;
+  readonly onSpells: () => void;
   readonly onUndo: () => void;
   readonly onEndTurn: () => void;
 }
@@ -49,8 +53,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       <button type="button" class="cmd-btn" data-cmd="move">Move</button>
       <button type="button" class="cmd-btn" data-cmd="attack">Attack</button>
       <button type="button" class="cmd-btn" data-cmd="actions">Actions</button>
-      <button type="button" class="cmd-btn" disabled>Bonus</button>
-      <button type="button" class="cmd-btn" disabled>Spells</button>
+      <button type="button" class="cmd-btn" data-cmd="bonus">Bonus</button>
+      <button type="button" class="cmd-btn" data-cmd="spells">Spells</button>
       <button type="button" class="cmd-btn" disabled>Items</button>
       <button type="button" class="cmd-btn cmd-undo" data-cmd="undo">Undo</button>
       <button type="button" class="cmd-btn cmd-end" data-cmd="end">End Turn</button>
@@ -66,6 +70,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const moveBtn = select<HTMLButtonElement>('[data-cmd="move"]');
   const attackBtn = select<HTMLButtonElement>('[data-cmd="attack"]');
   const actionsBtn = select<HTMLButtonElement>('[data-cmd="actions"]');
+  const bonusBtn = select<HTMLButtonElement>('[data-cmd="bonus"]');
+  const spellsBtn = select<HTMLButtonElement>('[data-cmd="spells"]');
   const undoBtn = select<HTMLButtonElement>('[data-cmd="undo"]');
   const endBtn = select<HTMLButtonElement>('[data-cmd="end"]');
   const phaseEl = select('.cmd-phase');
@@ -77,6 +83,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   moveBtn.addEventListener('click', handlers.onMove);
   attackBtn.addEventListener('click', handlers.onAttack);
   actionsBtn.addEventListener('click', handlers.onActions);
+  bonusBtn.addEventListener('click', handlers.onBonus);
+  spellsBtn.addEventListener('click', handlers.onSpells);
   undoBtn.addEventListener('click', handlers.onUndo);
   endBtn.addEventListener('click', handlers.onEndTurn);
 
@@ -90,6 +98,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       moveBtn.disabled = !view.canMove;
       attackBtn.disabled = !view.canAttack;
       actionsBtn.disabled = !view.canActions;
+      bonusBtn.disabled = !view.canBonus;
+      spellsBtn.disabled = !view.canSpells;
       undoBtn.disabled = !view.canUndo;
       endBtn.disabled = view.phase !== 'player';
       moveBtn.classList.toggle('active', view.selecting === 'move');

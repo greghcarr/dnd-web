@@ -21,6 +21,13 @@ type ActionEconomyView = ReturnType<Engine['query']['actionEconomy']>;
 type AvailableAction = ReturnType<Engine['query']['availableActions']>[number];
 type Position = MoveDestination['position'];
 
+// Spell + bonus-action affordance shapes (slices 713/714), derived from the
+// query namespace so we don't depend on the type names being exported.
+export type CastableSpell = ReturnType<Engine['query']['castableSpells']>[number];
+export type LegalSpellTargets = ReturnType<Engine['query']['legalSpellTargets']>;
+export type BonusActionOption = ReturnType<Engine['query']['bonusActions']>[number];
+export type SpellTarget = { readonly targetIds?: readonly string[]; readonly targetPosition?: Position };
+
 // The self-targeted action-economy actions the Actions menu offers (move and
 // attack have their own command-bar buttons).
 export type SimpleAction = 'dash' | 'disengage' | 'dodge';
@@ -136,6 +143,77 @@ export class DuelSession {
   availableActions(): readonly AvailableAction[] {
     if (this.activeId() !== this.playerId) return [];
     return this.engine.query.availableActions(this.store.currentTail.state, this.encounterId, this.playerId);
+  }
+
+  castableSpells(): readonly CastableSpell[] {
+    if (this.activeId() !== this.playerId) return [];
+    return this.engine.query.castableSpells(this.store.currentTail.state, this.playerId);
+  }
+
+  legalSpellTargets(spellId: string, slotLevel: number): LegalSpellTargets {
+    return this.engine.query.legalSpellTargets(this.store.currentTail.state, this.encounterId, this.playerId, spellId, slotLevel);
+  }
+
+  bonusActions(): readonly BonusActionOption[] {
+    if (this.activeId() !== this.playerId) return [];
+    return this.engine.query.bonusActions(this.store.currentTail.state, this.encounterId, this.playerId);
+  }
+
+  spellName(spellId: string): string {
+    return this.engine.content.spells.get(spellId)?.name ?? spellId;
+  }
+
+  // Cast a spell at a slot level + targets. Dice (attack/save/damage/heal)
+  // route through the dice source (manual or app). Casting is a committing
+  // action, so it locks undo. A cast can fail (concentration / economy / edge
+  // cases) even past target validation; on failure it aborts cleanly.
+  async commitSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<void> {
+    if (this.phase() !== 'player') return;
+    this.busy = true;
+    this.notify();
+    try {
+      const result = await this.dice.resolve(() =>
+        this.engine.plan.castSpell(this.store.currentTail.state, {
+          characterId: this.playerId,
+          spellId,
+          slotLevel,
+          targetIds: target.targetIds ?? [],
+          ...(target.targetPosition ? { targetPosition: target.targetPosition } : {}),
+        }),
+      );
+      this.store.append(result.events);
+      await playToTail(this.store);
+      this.diceRolledThisTurn = true;
+      this.undoStack = [];
+    } catch {
+      // Cast rejected (e.g. concentration / action-economy edge); no-op.
+    }
+    this.busy = false;
+    this.notify();
+  }
+
+  // Perform an enumerated bonus-action option via the engine dispatcher.
+  async commitOption(optionId: string, targetId?: string): Promise<void> {
+    if (this.phase() !== 'player') return;
+    this.busy = true;
+    this.notify();
+    try {
+      const result = await this.dice.resolve(() =>
+        this.engine.plan.useOption(this.store.currentTail.state, {
+          combatantId: this.playerId,
+          optionId,
+          ...(targetId ? { targetId } : {}),
+        }),
+      );
+      this.store.append(result.events);
+      await playToTail(this.store);
+      this.diceRolledThisTurn = true;
+      this.undoStack = [];
+    } catch {
+      // Option rejected; no-op.
+    }
+    this.busy = false;
+    this.notify();
   }
 
   // Dash / Disengage / Dodge: self-targeted, dice-free, so undoable like a

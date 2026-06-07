@@ -1,4 +1,10 @@
-import type { DuelSession, DuelPhase, SimpleAction } from './duel-session';
+import type {
+  DuelSession,
+  DuelPhase,
+  SimpleAction,
+  CastableSpell,
+  LegalSpellTargets,
+} from './duel-session';
 import type { DuelOutcome } from './outcome';
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
@@ -12,10 +18,21 @@ const SIMPLE_ACTION_LABELS: Record<SimpleAction, string> = {
   dodge: 'Dodge',
 };
 
-// Ties the live duel together: the command bar (DOM) issues intents, the
-// arena interaction channel shows the green move / red target overlay and
-// reports cell taps, and the DuelSession is the brain. The controller is the
-// only place that knows the current selection mode (move vs attack vs idle).
+// Bonus-action spells are listed in the Bonus menu alongside class features;
+// this prefix tags them so a pick routes to the spell flow, not useOption.
+const SPELL_OPTION_PREFIX = 'spell:';
+
+// What the player is currently aiming. Move/attack target via the command-bar
+// buttons; a spell that needs a target parks here while the player taps a cell.
+type Pending =
+  | { readonly kind: 'move' }
+  | { readonly kind: 'attack' }
+  | { readonly kind: 'spell'; readonly spellId: string; readonly slotLevel: number; readonly targeting: LegalSpellTargets };
+
+// Ties the live duel together: the command bar (DOM) issues intents, the arena
+// interaction channel shows the move/target overlay and reports cell taps, and
+// the DuelSession is the brain. The controller is the only place that knows the
+// current selection/aiming state.
 
 const statusText = (phase: DuelPhase, outcome: DuelOutcome): string => {
   switch (phase) {
@@ -31,7 +48,7 @@ const statusText = (phase: DuelPhase, outcome: DuelOutcome): string => {
 };
 
 export class DuelController {
-  private selecting: 'move' | 'attack' | null = null;
+  private pending: Pending | null = null;
   private readonly bar: CommandBar;
   private readonly menu: OptionMenu;
   private endScreen?: EndScreen;
@@ -47,6 +64,8 @@ export class DuelController {
       onMove: () => this.toggleSelect('move'),
       onAttack: () => this.toggleSelect('attack'),
       onActions: () => this.openActions(),
+      onBonus: () => this.openBonus(),
+      onSpells: () => this.openSpells(),
       onUndo: () => {
         this.clearSelection();
         this.duel.undo();
@@ -74,10 +93,12 @@ export class DuelController {
   private toggleSelect(mode: 'move' | 'attack'): void {
     if (this.duel.phase() !== 'player') return;
     this.menu.hide();
-    this.selecting = this.selecting === mode ? null : mode;
+    this.pending = this.pending?.kind === mode ? null : { kind: mode };
     this.syncMarks();
     this.refresh();
   }
+
+  // --- Actions menu (Dash / Disengage / Dodge) ---
 
   private openActions(): void {
     if (this.duel.phase() !== 'player') return;
@@ -99,49 +120,163 @@ export class DuelController {
     return out;
   }
 
+  // --- Spells menu (action-cost spells) ---
+
+  private openSpells(): void {
+    if (this.duel.phase() !== 'player') return;
+    this.clearSelection();
+    const spells = this.actionSpells();
+    this.menu.show(
+      'Spells',
+      spells.map((spell) => this.spellOption(spell, spell.spellId)),
+      (spellId) => this.chooseSpell(spellId),
+    );
+  }
+
+  // --- Bonus Actions menu (class features + bonus-action spells) ---
+
+  private openBonus(): void {
+    if (this.duel.phase() !== 'player') return;
+    this.clearSelection();
+    const options: MenuOption[] = this.duel.bonusActions().map((option) => ({
+      id: option.id,
+      label: option.label,
+      enabled: option.enabled,
+      hint: option.reason ? option.reason.replace(/-/g, ' ') : undefined,
+    }));
+    for (const spell of this.bonusSpells()) {
+      options.push(this.spellOption(spell, `${SPELL_OPTION_PREFIX}${spell.spellId}`));
+    }
+    this.menu.show('Bonus Actions', options, (id) => {
+      if (id.startsWith(SPELL_OPTION_PREFIX)) {
+        this.chooseSpell(id.slice(SPELL_OPTION_PREFIX.length));
+        return;
+      }
+      this.useBonusOption(id);
+    });
+  }
+
+  private useBonusOption(optionId: string): void {
+    const option = this.duel.bonusActions().find((o) => o.id === optionId);
+    if (!option) return;
+    // 1v1: a creature-target bonus action targets the lone opponent.
+    const targetId = option.target === 'creature' ? this.duel.enemyId : undefined;
+    void this.duel.commitOption(optionId, targetId);
+  }
+
+  // Pick a spell: cast self-targeted spells immediately; otherwise park in
+  // targeting mode and highlight the legal targets/cells.
+  private chooseSpell(spellId: string): void {
+    const spell = this.duel.castableSpells().find((s) => s.spellId === spellId);
+    if (!spell || spell.levelOptions.length === 0) return;
+    const slotLevel = Math.min(...spell.levelOptions);
+    const targeting = this.duel.legalSpellTargets(spellId, slotLevel);
+    if (targeting.kind === 'self') {
+      void this.duel.commitSpell(spellId, slotLevel, { targetIds: [this.duel.playerId] });
+      return;
+    }
+    if (
+      (targeting.kind === 'creatures' && targeting.candidates.length === 0) ||
+      (targeting.kind === 'points' && targeting.cells.length === 0)
+    ) {
+      return; // nothing legal to target
+    }
+    this.pending = { kind: 'spell', spellId, slotLevel, targeting };
+    this.syncMarks();
+    this.refresh();
+  }
+
+  private spellOption(spell: CastableSpell, id: string): MenuOption {
+    const suffix = spell.castingTime === 'action' ? '' : ` (${spell.castingTime.replace('-', ' ')})`;
+    return { id, label: `${this.duel.spellName(spell.spellId)}${suffix}`, enabled: true };
+  }
+
+  private actionSpells(): readonly CastableSpell[] {
+    return this.duel.castableSpells().filter((s) => s.castingTime === 'action' || s.castingTime === 'other');
+  }
+
+  private bonusSpells(): readonly CastableSpell[] {
+    return this.duel.castableSpells().filter((s) => s.castingTime === 'bonus-action');
+  }
+
   private clearSelection(): void {
-    this.selecting = null;
+    this.pending = null;
     this.interaction.clearMarks();
     this.menu.hide();
   }
 
   private syncMarks(): void {
     const cellSize = this.duel.cellSizeFeet;
-    if (this.selecting === 'move') {
+    if (!this.pending) {
+      this.interaction.clearMarks();
+      return;
+    }
+    if (this.pending.kind === 'move') {
       this.interaction.setMarks(
         this.duel.moveDestinations().map((d): CellMark => ({ ...cellOf(d.position, cellSize), kind: 'move' })),
       );
-    } else if (this.selecting === 'attack') {
-      const marks: CellMark[] = [];
-      for (const target of this.duel.attackTargets()) {
-        if (!target.position) continue;
-        marks.push({ ...cellOf(target.position, cellSize), kind: 'target' });
-      }
-      this.interaction.setMarks(marks);
+      return;
+    }
+    if (this.pending.kind === 'attack') {
+      this.interaction.setMarks(this.targetMarks(this.duel.attackTargets()));
+      return;
+    }
+    const targeting = this.pending.targeting;
+    if (targeting.kind === 'creatures') {
+      this.interaction.setMarks(this.targetMarks(targeting.candidates));
+    } else if (targeting.kind === 'points') {
+      this.interaction.setMarks(
+        targeting.cells.map((cell): CellMark => ({ ...cellOf(cell, cellSize), kind: 'target' })),
+      );
     } else {
       this.interaction.clearMarks();
     }
   }
 
-  private async onCellClick(col: number, row: number): Promise<void> {
-    if (this.duel.phase() !== 'player' || !this.selecting) return;
+  private targetMarks(candidates: ReadonlyArray<{ readonly position?: { x: number; y: number } }>): CellMark[] {
     const cellSize = this.duel.cellSizeFeet;
-    if (this.selecting === 'move') {
-      const dest = this.duel
-        .moveDestinations()
-        .find((d) => cellOf(d.position, cellSize).col === col && cellOf(d.position, cellSize).row === row);
+    const marks: CellMark[] = [];
+    for (const candidate of candidates) {
+      if (!candidate.position) continue;
+      marks.push({ ...cellOf(candidate.position, cellSize), kind: 'target' });
+    }
+    return marks;
+  }
+
+  private async onCellClick(col: number, row: number): Promise<void> {
+    if (this.duel.phase() !== 'player' || !this.pending) return;
+    const cellSize = this.duel.cellSizeFeet;
+    const at = (pos: { x: number; y: number }): boolean => {
+      const cell = cellOf(pos, cellSize);
+      return cell.col === col && cell.row === row;
+    };
+
+    if (this.pending.kind === 'move') {
+      const dest = this.duel.moveDestinations().find((d) => at(d.position));
       if (!dest) return;
       this.clearSelection();
       await this.duel.commitMove(dest.position);
-    } else {
-      const target = this.duel.attackTargets().find((t) => {
-        if (!t.position) return false;
-        const cell = cellOf(t.position, cellSize);
-        return cell.col === col && cell.row === row;
-      });
+      return;
+    }
+    if (this.pending.kind === 'attack') {
+      const target = this.duel.attackTargets().find((t) => t.position && at(t.position));
       if (!target) return;
       this.clearSelection();
       await this.duel.commitAttack(target.combatantId);
+      return;
+    }
+    // Spell targeting.
+    const { spellId, slotLevel, targeting } = this.pending;
+    if (targeting.kind === 'creatures') {
+      const target = targeting.candidates.find((c) => c.position && at(c.position));
+      if (!target) return;
+      this.clearSelection();
+      await this.duel.commitSpell(spellId, slotLevel, { targetIds: [target.combatantId] });
+    } else if (targeting.kind === 'points') {
+      const point = targeting.cells.find((cell) => at(cell));
+      if (!point) return;
+      this.clearSelection();
+      await this.duel.commitSpell(spellId, slotLevel, { targetPosition: point });
     }
   }
 
@@ -153,6 +288,7 @@ export class DuelController {
     }
     if (phase !== 'player') this.clearSelection();
     const economy = this.duel.economy();
+    const selecting = this.pending?.kind === 'move' || this.pending?.kind === 'attack' ? this.pending.kind : null;
     this.bar.render({
       phase,
       statusText: statusText(phase, this.duel.outcome()),
@@ -163,8 +299,12 @@ export class DuelController {
       canMove: phase === 'player' && this.duel.moveDestinations().length > 0,
       canAttack: phase === 'player' && this.duel.attackTargets().length > 0 && (economy?.actionAvailable ?? false),
       canActions: phase === 'player' && this.actionOptions().some((option) => option.enabled),
+      canBonus:
+        phase === 'player' &&
+        (this.duel.bonusActions().some((option) => option.enabled) || this.bonusSpells().length > 0),
+      canSpells: phase === 'player' && this.actionSpells().length > 0,
       canUndo: this.duel.canUndo(),
-      selecting: this.selecting,
+      selecting,
     });
   }
 }
