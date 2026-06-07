@@ -646,7 +646,7 @@ body {
   font-size: 0.82rem;
   color: var(--text-dim);
 }
-.start-level-select {
+.start-select {
   flex: 1 1 auto;
   padding: 0.4rem 0.5rem;
   color: var(--text);

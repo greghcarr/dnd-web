@@ -15,7 +15,16 @@ export interface StartScreen {
   unmount(): void;
 }
 
-export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfig) => void): StartScreen => {
+export interface ClassOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+export const mountStartScreen = (
+  parent: HTMLElement,
+  classes: ReadonlyArray<ClassOption>,
+  onBegin: (config: RunConfig) => void,
+): StartScreen => {
   const root = document.createElement('div');
   root.id = 'start-screen';
   root.innerHTML = `
@@ -28,7 +37,8 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
       </section>
       <section class="start-section">
         <h2>Free Duel</h2>
-        <label class="start-field">Level <select class="start-level-select"></select></label>
+        <label class="start-field">Class <select class="start-select start-class-select"></select></label>
+        <label class="start-field">Level <select class="start-select start-level-select"></select></label>
         <div class="start-seed">
           <label>Seed <input type="number" class="start-seed-input" min="0" step="1" /></label>
           <button type="button" class="start-reroll" aria-label="Random seed" title="Random seed">⟳</button>
@@ -51,6 +61,18 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
   select('.start-date').textContent = dailyLabel();
   const seedInput = select<HTMLInputElement>('.start-seed-input');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
+  const classSelect = select<HTMLSelectElement>('.start-class-select');
+  const randomOption = document.createElement('option');
+  randomOption.value = '';
+  randomOption.textContent = 'Random';
+  classSelect.appendChild(randomOption);
+  for (const cls of classes) {
+    const option = document.createElement('option');
+    option.value = cls.id;
+    option.textContent = cls.name;
+    classSelect.appendChild(option);
+  }
+
   const levelSelect = select<HTMLSelectElement>('.start-level-select');
   for (let level = LEVEL_MIN; level <= LEVEL_MAX; level += 1) {
     const option = document.createElement('option');
@@ -72,8 +94,9 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
     const parsed = Number.parseInt(seedInput.value, 10);
     const seed = Number.isFinite(parsed) && parsed >= 0 ? parsed : randomSeed();
     const level = Number.parseInt(levelSelect.value, 10) || DEFAULT_LEVEL;
+    const playerClass = classSelect.value || undefined;
     setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
-    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level });
+    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass });
   });
 
   return {

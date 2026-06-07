@@ -13,4 +13,7 @@ export interface RunConfig {
   // Character level for both combatants (the opponent matches the player). The
   // engine auto-resolves all level-up choices.
   readonly level: number;
+  // The player's chosen class id; undefined leaves it seed-random. The
+  // opponent's class stays random regardless.
+  readonly playerClass?: string;
 }

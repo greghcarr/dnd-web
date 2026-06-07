@@ -51,5 +51,23 @@ export const LEVEL_MAX = 5;
 export const DEFAULT_MODE: FuzzMode = '1v1';
 export const DEFAULT_VS: FuzzVsKind = 'pc';
 
+// The base classes a Free Duel player can pin (engine slice 717's pinnable
+// CLASS_POOLS set). A content pack may define others; only these are honored,
+// so the class picker filters to them. A non-pinnable id falls back to random.
+export const DUEL_CLASS_IDS: ReadonlyArray<string> = [
+  'barbarian',
+  'bard',
+  'cleric',
+  'druid',
+  'fighter',
+  'monk',
+  'paladin',
+  'ranger',
+  'rogue',
+  'sorcerer',
+  'warlock',
+  'wizard',
+];
+
 export const TEAM_SIZE_1V1 = 1;
 export const TEAM_SIZE_2V2 = 2;

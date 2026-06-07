@@ -8,6 +8,7 @@ import {
   DEFAULT_VS,
   DEFAULT_APP_MODE_ID,
   INTERACTIVE_DUEL_MODE_ID,
+  DUEL_CLASS_IDS,
 } from '@/constants/app';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
@@ -74,6 +75,11 @@ const boot = (): void => {
   setVersionBadge();
 
   const bridge = new EngineBridge();
+  // Classes the Free Duel can pin, with display names from the loaded pack.
+  const duelClassOptions = DUEL_CLASS_IDS.map((id) => ({
+    id,
+    name: bridge.getContent().classes.get(id)?.name ?? id,
+  })).sort((a, b) => a.name.localeCompare(b.name));
   let currentConfig: BattleConfig = { ...DEFAULT_CONFIG };
   let currentMovement: FuzzMovement = currentConfig.movement ?? 'none';
   const store = new ReplayStore(bridge.startBattle(currentConfig));
@@ -134,7 +140,7 @@ const boot = (): void => {
 
     // Pre-duel menu: choose Daily / Free, then begin.
     function showStart(): void {
-      const start = mountStartScreen(gameRoot, (config) => {
+      const start = mountStartScreen(gameRoot, duelClassOptions, (config) => {
         start.unmount();
         teardownActive = runDuel(config);
       });

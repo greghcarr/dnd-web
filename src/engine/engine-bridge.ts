@@ -17,6 +17,9 @@ export interface BattleConfig {
   // Omitted/`'none'` is the positionless fuzz; `'tactical'` spawns combatants
   // on a generated map and moves them. Defaults to 'none'.
   readonly movement?: FuzzMovement;
+  // Pins team A (the player) to this class; undefined leaves it seed-random
+  // (engine slice 717). The map and opponent are unchanged by the pin.
+  readonly playerClass?: string;
 }
 
 // Compile-time guard that the app's local fuzz union stays assignable to
@@ -59,6 +62,7 @@ export class EngineBridge {
       teamSize: config.mode === '2v2' ? TEAM_SIZE_2V2 : TEAM_SIZE_1V1,
       vs: config.vs,
       movement: config.movement ?? 'none',
+      playerClass: config.playerClass,
     });
 
     const fullCampaign = result.campaign;
