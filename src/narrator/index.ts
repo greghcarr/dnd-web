@@ -24,6 +24,10 @@ export const narrate = (
   events: ReadonlyArray<Event>,
   content: ResolvedContent,
   winner: string | null = null,
+  // Whether the battle is over. Replay logs are always complete, so this
+  // defaults true; the live duel passes false while a turn is in progress so
+  // the closing line isn't tacked on after every action.
+  ended: boolean = true,
 ): NarrationLine[] => {
   // Precompute the state before and after each event so name and HP
   // lookups are exact at the moment the event fired.
@@ -138,7 +142,8 @@ export const narrate = (
   // The fuzz log has no EncounterEnded event, so synthesize a closing line
   // from the result. Attributed to the last event so it appears only once
   // the cursor reaches the end; appended after the sort so it renders last.
-  if (events.length > 0) {
+  // Skipped while the battle is still in progress (live duel).
+  if (ended && events.length > 0) {
     const finalState = after[events.length - 1]!;
     const text =
       winner !== null

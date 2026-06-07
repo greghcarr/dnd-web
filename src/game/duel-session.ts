@@ -87,8 +87,12 @@ export class DuelSession {
     // Live battle log: re-narrate the growing campaign (winner line appears
     // only once the duel is decided).
     const content = bridge.getContent();
-    const renarrate = (campaign: typeof setup) =>
-      narrate(campaign.events, content, winnerId(campaign.state, playerId, enemyId));
+    const renarrate = (campaign: typeof setup) => {
+      // A duel has no draw; a winner exists exactly when it's over, so the
+      // closing line only appears then (not after every committed action).
+      const winner = winnerId(campaign.state, playerId, enemyId);
+      return narrate(campaign.events, content, winner, winner !== undefined);
+    };
     const liveSession: Session = {
       ...session,
       fullCampaign: setup,
