@@ -34,6 +34,11 @@ export const frameBounds = (
     camera.pan(cx, cy, CAMERA_PAN_MS, 'Quad.easeInOut');
     camera.zoomTo(zoom, CAMERA_PAN_MS, 'Quad.easeInOut');
   } else {
+    // Cancel any in-flight pan/zoom from a prior animated step; otherwise the
+    // running tween keeps updating the camera after this snap and the view
+    // drifts off-centre (seen on resize / mode switch mid-animation).
+    camera.panEffect.reset();
+    camera.zoomEffect.reset();
     camera.setZoom(zoom);
     camera.centerOn(cx, cy);
   }

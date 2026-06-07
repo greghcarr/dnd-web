@@ -90,6 +90,7 @@ export class ArenaScene extends Phaser.Scene {
   private interaction?: ArenaInteraction;
   private overlay?: Phaser.GameObjects.Graphics;
   private interactionUnsub?: () => void;
+  private resizeObserver?: ResizeObserver;
 
   constructor() {
     super('Arena');
@@ -100,6 +101,16 @@ export class ArenaScene extends Phaser.Scene {
     registerCharacterAnims(this);
     this.store = this.registry.get('store') as SnapshotSource;
     this.scale.on(Phaser.Scale.Events.RESIZE, this.reframe, this);
+    // Phaser's RESIZE mode only watches the window, so a CSS-driven arena
+    // resize (collapsing the right column) or a mobile viewport change (iOS
+    // Safari toolbar show/hide, rotation) never reaches it and the camera
+    // stops re-centering. Observe the canvas parent directly and refresh the
+    // scale manager, which re-fits and re-emits RESIZE -> reframe.
+    const parent = this.scale.parent as HTMLElement | null;
+    if (parent && typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.scale.refresh());
+      this.resizeObserver.observe(parent);
+    }
     // The interaction channel is present only when a live duel is active; the
     // overlay graphics and tap handler are inert (no marks, no handler) in
     // replay modes.
@@ -113,6 +124,7 @@ export class ArenaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       this.interactionUnsub?.();
+      this.resizeObserver?.disconnect();
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.reframe, this);
     });

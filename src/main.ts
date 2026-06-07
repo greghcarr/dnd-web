@@ -95,7 +95,8 @@ const boot = (): void => {
     layoutEl.classList.toggle('logs-collapsed', collapsed);
     logsToggle.textContent = collapsed ? '⟨' : '⟩';
     logsToggle.setAttribute('aria-label', collapsed ? 'Show logs' : 'Hide logs');
-    game.scale.refresh();
+    // The arena's ResizeObserver picks up the column change after reflow and
+    // re-fits + re-centers the camera; no manual refresh needed here.
   };
   let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed);
   applyLogsCollapsed(logsCollapsed);
