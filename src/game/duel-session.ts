@@ -2,7 +2,7 @@ import type { Engine, Campaign } from 'dnd-srd-engine';
 import type { EngineBridge } from '@/engine/engine-bridge';
 import { LiveStore } from '@/engine/live-store';
 import { buildScrubbed, createScrubCache } from '@/engine/scrub-cache';
-import { DEFAULT_MODE, DEFAULT_VS, DEFAULT_LEVEL } from '@/constants/app';
+import { DEFAULT_MODE, DEFAULT_VS } from '@/constants/app';
 import type { Session } from '@/state/session';
 import type { RunConfig } from './run-config';
 import { narrate } from '@/narrator';
@@ -70,7 +70,7 @@ export class DuelSession {
       seed: config.seed,
       mode: DEFAULT_MODE,
       vs: DEFAULT_VS,
-      level: DEFAULT_LEVEL,
+      level: config.level,
       movement: 'tactical',
     });
     // Branch the live campaign at the set-up frame: all spawns, placement,

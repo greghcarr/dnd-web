@@ -1,6 +1,7 @@
 import type { RunConfig } from '@/game/run-config';
 import { dailySeed, dailyLabel } from '@/game/daily';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
+import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL } from '@/constants/app';
 
 // Pre-duel menu: pick the Daily Challenge (fixed UTC-date seed, app dice,
 // the same battle for everyone today) or a Free Duel (random or typed seed,
@@ -27,6 +28,7 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
       </section>
       <section class="start-section">
         <h2>Free Duel</h2>
+        <label class="start-field">Level <select class="start-level-select"></select></label>
         <div class="start-seed">
           <label>Seed <input type="number" class="start-seed-input" min="0" step="1" /></label>
           <button type="button" class="start-reroll" aria-label="Random seed" title="Random seed">⟳</button>
@@ -49,6 +51,14 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
   select('.start-date').textContent = dailyLabel();
   const seedInput = select<HTMLInputElement>('.start-seed-input');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
+  const levelSelect = select<HTMLSelectElement>('.start-level-select');
+  for (let level = LEVEL_MIN; level <= LEVEL_MAX; level += 1) {
+    const option = document.createElement('option');
+    option.value = String(level);
+    option.textContent = `Level ${level}`;
+    levelSelect.appendChild(option);
+  }
+  levelSelect.value = String(DEFAULT_LEVEL);
   seedInput.value = String(randomSeed());
   manualCheck.checked = getBoolSetting(SettingKey.ManualDice);
 
@@ -56,13 +66,14 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
     seedInput.value = String(randomSeed());
   });
   select('[data-start="daily"]').addEventListener('click', () => {
-    onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false });
+    onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false, level: DEFAULT_LEVEL });
   });
   select('[data-start="free"]').addEventListener('click', () => {
     const parsed = Number.parseInt(seedInput.value, 10);
     const seed = Number.isFinite(parsed) && parsed >= 0 ? parsed : randomSeed();
+    const level = Number.parseInt(levelSelect.value, 10) || DEFAULT_LEVEL;
     setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
-    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked });
+    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level });
   });
 
   return {

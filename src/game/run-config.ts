@@ -10,4 +10,7 @@ export interface RunConfig {
   readonly kind: DuelKind;
   readonly seed: number;
   readonly manualDice: boolean;
+  // Character level for both combatants (the opponent matches the player). The
+  // engine auto-resolves all level-up choices.
+  readonly level: number;
 }

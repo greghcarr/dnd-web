@@ -639,6 +639,23 @@ body {
   font-size: 1.1rem;
   cursor: pointer;
 }
+.start-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.start-level-select {
+  flex: 1 1 auto;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+}
 .start-manual {
   display: flex;
   align-items: center;
