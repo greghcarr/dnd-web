@@ -91,6 +91,7 @@ export class ArenaScene extends Phaser.Scene {
   private overlay?: Phaser.GameObjects.Graphics;
   private interactionUnsub?: () => void;
   private resizeObserver?: ResizeObserver;
+  private reframeQueued = false;
 
   constructor() {
     super('Arena');
@@ -100,15 +101,19 @@ export class ArenaScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
     registerCharacterAnims(this);
     this.store = this.registry.get('store') as SnapshotSource;
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.reframe, this);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
     // Phaser's RESIZE mode only watches the window, so a CSS-driven arena
     // resize (collapsing the right column) or a mobile viewport change (iOS
     // Safari toolbar show/hide, rotation) never reaches it and the camera
-    // stops re-centering. Observe the canvas parent directly and refresh the
-    // scale manager, which re-fits and re-emits RESIZE -> reframe.
+    // stops re-centering. Observe the canvas parent directly, refresh the
+    // scale manager to the new size, then reframe on the next frame (once the
+    // canvas + camera have settled at that size).
     const parent = this.scale.parent as HTMLElement | null;
     if (parent && typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver(() => this.scale.refresh());
+      this.resizeObserver = new ResizeObserver(() => {
+        this.scale.refresh();
+        this.scheduleReframe();
+      });
       this.resizeObserver.observe(parent);
     }
     // The interaction channel is present only when a live duel is active; the
@@ -126,7 +131,7 @@ export class ArenaScene extends Phaser.Scene {
       this.interactionUnsub?.();
       this.resizeObserver?.disconnect();
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
-      this.scale.off(Phaser.Scale.Events.RESIZE, this.reframe, this);
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
     });
     this.unsubscribe = this.store.subscribe((snapshot) => this.onSnapshot(snapshot));
   }
@@ -462,6 +467,18 @@ export class ArenaScene extends Phaser.Scene {
     const col = Math.floor(world.x / GRID_TILE_PX);
     const row = Math.floor(world.y / GRID_TILE_PX);
     this.interaction.clickCell(col, row);
+  }
+
+  // Reframe on the next animation frame, coalescing bursts of resize events.
+  // Deferring lets the canvas + camera settle at the new size first, so the
+  // fit uses the final dimensions (not a mid-transition size).
+  private scheduleReframe(): void {
+    if (this.reframeQueued) return;
+    this.reframeQueued = true;
+    requestAnimationFrame(() => {
+      this.reframeQueued = false;
+      this.reframe();
+    });
   }
 
   // Resize handler: re-fit the camera to the current state (never animated).

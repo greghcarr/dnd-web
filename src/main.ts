@@ -101,8 +101,11 @@ const boot = (): void => {
     layoutEl.classList.toggle('logs-collapsed', collapsed);
     logsToggle.textContent = collapsed ? '⟨' : '⟩';
     logsToggle.setAttribute('aria-label', collapsed ? 'Show logs' : 'Hide logs');
-    // The arena's ResizeObserver picks up the column change after reflow and
-    // re-fits + re-centers the camera; no manual refresh needed here.
+    // Force the arena to re-fit after the grid reflows. The ResizeObserver
+    // also covers this, but hiding the whole column is a large mutation it can
+    // batch/defer, so refresh explicitly on the next frame (which re-emits
+    // RESIZE -> reframe).
+    requestAnimationFrame(() => game.scale.refresh());
   };
   let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed);
   applyLogsCollapsed(logsCollapsed);
