@@ -211,11 +211,12 @@ body {
   padding: 0.4rem 0.6rem;
 }
 
-/* Version badge overlays the map's bottom-left corner. */
+/* Version badge overlays the map's top-left corner (the bottom is owned by
+   the interactive duel's command bar). */
 #version-badge {
   position: absolute;
   left: 10px;
-  bottom: 8px;
+  top: 8px;
   z-index: 2;
   pointer-events: none;
   font-family: var(--mono);
@@ -821,11 +822,27 @@ body {
   }
   #layout {
     grid-template-columns: 100%;
-    grid-template-rows: 42% 58%;
+    /* The arena takes the remaining space and the panel row sizes to its
+       content, so collapsing the log panels grows the arena to fill the
+       screen (the arena's ResizeObserver re-fits the camera). */
+    grid-template-rows: 1fr auto;
   }
   #right {
     grid-column: 1;
     grid-row: 2;
+  }
+  /* Panels size to content (capped, scrolling within) instead of filling the
+     row, so the row shrinks as they collapse and the arena expands. */
+  #mode-content {
+    flex: 0 0 auto;
+  }
+  #event-inspector,
+  #narrator-console {
+    flex: 0 0 auto;
+  }
+  #event-inspector .panel-scroll,
+  #narrator-console .panel-scroll {
+    max-height: 26vh;
   }
   /* Larger touch targets for the transport and config controls. */
   #transport button {
