@@ -473,6 +473,59 @@ body {
   border-color: var(--accent);
 }
 
+/* Command-bar sub-menu (Actions now; Spells / Bonus later): a popup card
+   above the bar, with a transparent backdrop that closes it on outside tap. */
+#option-menu {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0.6rem 5rem;
+  pointer-events: auto;
+}
+#option-menu[hidden] {
+  display: none;
+}
+.menu-card {
+  width: min(300px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+.menu-title {
+  padding: 0.2rem 0.4rem 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.menu-item {
+  min-height: 2.6rem;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  color: var(--text);
+  background: #232834;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.menu-item:hover:not(:disabled) {
+  background: #2c3340;
+}
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Immersive toggle: collapse the right column so the arena fills the full
    width (height on phones). Sits in the arena's top-right corner. */
 #logs-toggle {

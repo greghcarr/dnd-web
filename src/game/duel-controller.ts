@@ -1,9 +1,16 @@
-import type { DuelSession, DuelPhase } from './duel-session';
+import type { DuelSession, DuelPhase, SimpleAction } from './duel-session';
 import type { DuelOutcome } from './outcome';
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
+import { mountOptionMenu, type OptionMenu, type MenuOption } from '@/ui/command-bar/option-menu';
 import { mountEndScreen, type EndScreen } from '@/ui/end-screen';
 import { cellOf } from '@/spatial/engine-positions';
+
+const SIMPLE_ACTION_LABELS: Record<SimpleAction, string> = {
+  dash: 'Dash',
+  disengage: 'Disengage',
+  dodge: 'Dodge',
+};
 
 // Ties the live duel together: the command bar (DOM) issues intents, the
 // arena interaction channel shows the green move / red target overlay and
@@ -26,6 +33,7 @@ const statusText = (phase: DuelPhase, outcome: DuelOutcome): string => {
 export class DuelController {
   private selecting: 'move' | 'attack' | null = null;
   private readonly bar: CommandBar;
+  private readonly menu: OptionMenu;
   private endScreen?: EndScreen;
   private readonly unsubscribeDuel: () => void;
 
@@ -38,6 +46,7 @@ export class DuelController {
     this.bar = mountCommandBar(gameRoot, {
       onMove: () => this.toggleSelect('move'),
       onAttack: () => this.toggleSelect('attack'),
+      onActions: () => this.openActions(),
       onUndo: () => {
         this.clearSelection();
         this.duel.undo();
@@ -47,6 +56,7 @@ export class DuelController {
         void this.duel.endTurn();
       },
     });
+    this.menu = mountOptionMenu(gameRoot);
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
     this.unsubscribeDuel = this.duel.onChange(() => this.refresh());
     this.refresh();
@@ -56,20 +66,43 @@ export class DuelController {
     this.unsubscribeDuel();
     this.interaction.setClickHandler(undefined);
     this.interaction.clearMarks();
+    this.menu.unmount();
     this.endScreen?.unmount();
     this.bar.unmount();
   }
 
   private toggleSelect(mode: 'move' | 'attack'): void {
     if (this.duel.phase() !== 'player') return;
+    this.menu.hide();
     this.selecting = this.selecting === mode ? null : mode;
     this.syncMarks();
     this.refresh();
   }
 
+  private openActions(): void {
+    if (this.duel.phase() !== 'player') return;
+    this.clearSelection();
+    this.menu.show('Actions', this.actionOptions(), (id) => void this.duel.commitAction(id as SimpleAction));
+  }
+
+  private actionOptions(): MenuOption[] {
+    const out: MenuOption[] = [];
+    for (const available of this.duel.availableActions()) {
+      if (available.action !== 'dash' && available.action !== 'disengage' && available.action !== 'dodge') continue;
+      out.push({
+        id: available.action,
+        label: SIMPLE_ACTION_LABELS[available.action],
+        enabled: available.enabled,
+        hint: available.reason ? available.reason.replace(/-/g, ' ') : undefined,
+      });
+    }
+    return out;
+  }
+
   private clearSelection(): void {
     this.selecting = null;
     this.interaction.clearMarks();
+    this.menu.hide();
   }
 
   private syncMarks(): void {
@@ -129,6 +162,7 @@ export class DuelController {
       reaction: economy?.reactionAvailable ?? false,
       canMove: phase === 'player' && this.duel.moveDestinations().length > 0,
       canAttack: phase === 'player' && this.duel.attackTargets().length > 0 && (economy?.actionAvailable ?? false),
+      canActions: phase === 'player' && this.actionOptions().some((option) => option.enabled),
       canUndo: this.duel.canUndo(),
       selecting: this.selecting,
     });

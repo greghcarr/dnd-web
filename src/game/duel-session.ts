@@ -18,7 +18,12 @@ import type { DiceSource } from './dice-source';
 type MoveDestination = ReturnType<Engine['query']['legalMoveDestinations']>[number];
 type TargetCandidate = ReturnType<Engine['query']['legalTargets']>[number];
 type ActionEconomyView = ReturnType<Engine['query']['actionEconomy']>;
+type AvailableAction = ReturnType<Engine['query']['availableActions']>[number];
 type Position = MoveDestination['position'];
+
+// The self-targeted action-economy actions the Actions menu offers (move and
+// attack have their own command-bar buttons).
+export type SimpleAction = 'dash' | 'disengage' | 'dodge';
 
 export type DuelPhase = 'player' | 'busy' | 'enemy' | 'over';
 
@@ -126,6 +131,32 @@ export class DuelSession {
 
   economy(): ActionEconomyView {
     return this.engine.query.actionEconomy(this.store.currentTail.state, this.encounterId, this.playerId);
+  }
+
+  availableActions(): readonly AvailableAction[] {
+    if (this.activeId() !== this.playerId) return [];
+    return this.engine.query.availableActions(this.store.currentTail.state, this.encounterId, this.playerId);
+  }
+
+  // Dash / Disengage / Dodge: self-targeted, dice-free, so undoable like a
+  // clean move.
+  async commitAction(action: SimpleAction): Promise<void> {
+    if (this.phase() !== 'player') return;
+    this.busy = true;
+    this.notify();
+    const base = this.store.currentTail;
+    const intent = { combatantId: this.playerId };
+    const result =
+      action === 'dash'
+        ? this.engine.plan.dash(base.state, intent)
+        : action === 'disengage'
+          ? this.engine.plan.disengage(base.state, intent)
+          : this.engine.plan.dodge(base.state, intent);
+    this.store.append(result.events);
+    await playToTail(this.store);
+    this.busy = false;
+    if (!this.diceRolledThisTurn) this.undoStack.push(base);
+    this.notify();
   }
 
   async commitMove(to: Position): Promise<void> {

@@ -14,6 +14,7 @@ export interface CommandBarView {
   readonly reaction: boolean;
   readonly canMove: boolean;
   readonly canAttack: boolean;
+  readonly canActions: boolean;
   readonly canUndo: boolean;
   readonly selecting: 'move' | 'attack' | null;
 }
@@ -21,6 +22,7 @@ export interface CommandBarView {
 export interface CommandBarHandlers {
   readonly onMove: () => void;
   readonly onAttack: () => void;
+  readonly onActions: () => void;
   readonly onUndo: () => void;
   readonly onEndTurn: () => void;
 }
@@ -46,7 +48,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
     <div class="cmd-buttons">
       <button type="button" class="cmd-btn" data-cmd="move">Move</button>
       <button type="button" class="cmd-btn" data-cmd="attack">Attack</button>
-      <button type="button" class="cmd-btn" disabled>Actions</button>
+      <button type="button" class="cmd-btn" data-cmd="actions">Actions</button>
       <button type="button" class="cmd-btn" disabled>Bonus</button>
       <button type="button" class="cmd-btn" disabled>Spells</button>
       <button type="button" class="cmd-btn" disabled>Items</button>
@@ -63,6 +65,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   };
   const moveBtn = select<HTMLButtonElement>('[data-cmd="move"]');
   const attackBtn = select<HTMLButtonElement>('[data-cmd="attack"]');
+  const actionsBtn = select<HTMLButtonElement>('[data-cmd="actions"]');
   const undoBtn = select<HTMLButtonElement>('[data-cmd="undo"]');
   const endBtn = select<HTMLButtonElement>('[data-cmd="end"]');
   const phaseEl = select('.cmd-phase');
@@ -73,6 +76,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
 
   moveBtn.addEventListener('click', handlers.onMove);
   attackBtn.addEventListener('click', handlers.onAttack);
+  actionsBtn.addEventListener('click', handlers.onActions);
   undoBtn.addEventListener('click', handlers.onUndo);
   endBtn.addEventListener('click', handlers.onEndTurn);
 
@@ -85,6 +89,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       reactionPip.classList.toggle('spent', !view.reaction);
       moveBtn.disabled = !view.canMove;
       attackBtn.disabled = !view.canAttack;
+      actionsBtn.disabled = !view.canActions;
       undoBtn.disabled = !view.canUndo;
       endBtn.disabled = view.phase !== 'player';
       moveBtn.classList.toggle('active', view.selecting === 'move');
