@@ -1,7 +1,7 @@
 import type { RunConfig } from '@/game/run-config';
 import { dailySeed, dailyLabel } from '@/game/daily';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
-import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL } from '@/constants/app';
+import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL, DAILY_LEVEL } from '@/constants/app';
 
 // Pre-duel menu: pick the Daily Challenge (fixed UTC-date seed, app dice,
 // the same battle for everyone today) or a Free Duel (random or typed seed,
@@ -32,7 +32,7 @@ export const mountStartScreen = (
       <h1 class="start-title">Tactical Duel</h1>
       <section class="start-section">
         <h2>Daily Challenge</h2>
-        <p class="start-note">The same duel for everyone today (<span class="start-date"></span>). The app rolls the dice.</p>
+        <p class="start-note">The same <span class="start-daily-level"></span> duel for everyone today (<span class="start-date"></span>). The app rolls the dice.</p>
         <button type="button" class="start-btn start-primary" data-start="daily">Start Daily Run</button>
       </section>
       <section class="start-section">
@@ -59,6 +59,7 @@ export const mountStartScreen = (
     return el;
   };
   select('.start-date').textContent = dailyLabel();
+  select('.start-daily-level').textContent = `Level ${DAILY_LEVEL}`;
   const seedInput = select<HTMLInputElement>('.start-seed-input');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
   const classSelect = select<HTMLSelectElement>('.start-class-select');
@@ -88,7 +89,7 @@ export const mountStartScreen = (
     seedInput.value = String(randomSeed());
   });
   select('[data-start="daily"]').addEventListener('click', () => {
-    onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false, level: DEFAULT_LEVEL });
+    onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false, level: DAILY_LEVEL });
   });
   select('[data-start="free"]').addEventListener('click', () => {
     const parsed = Number.parseInt(seedInput.value, 10);

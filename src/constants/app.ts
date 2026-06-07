@@ -47,6 +47,8 @@ export const TACTICAL_DEFAULT_SEED = 123;
 export const DEFAULT_LEVEL = 1;
 export const LEVEL_MIN = 1;
 export const LEVEL_MAX = 5;
+// The daily challenge is always this level (a fixed, shared higher-level duel).
+export const DAILY_LEVEL = 5;
 
 export const DEFAULT_MODE: FuzzMode = '1v1';
 export const DEFAULT_VS: FuzzVsKind = 'pc';
