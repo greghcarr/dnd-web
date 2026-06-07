@@ -11,6 +11,7 @@ import { resolveMove } from './resolve-move';
 import { duelOutcome, winnerId, type DuelOutcome } from './outcome';
 import { activeCombatantId, mainWeaponInstanceId } from './combatant-read';
 import { playToTail } from './playback';
+import type { DiceSource } from './dice-source';
 
 // Affordance shapes, derived from the engine query namespace so we don't
 // depend on the type names being individually exported.
@@ -42,7 +43,11 @@ export class DuelSession {
   private readonly listeners = new Set<() => void>();
   private busy = false;
 
-  constructor(bridge: EngineBridge, config: RunConfig) {
+  constructor(
+    bridge: EngineBridge,
+    config: RunConfig,
+    private readonly dice: DiceSource,
+  ) {
     const session = bridge.startBattle({
       seed: config.seed,
       mode: DEFAULT_MODE,
@@ -120,6 +125,7 @@ export class DuelSession {
   async commitMove(to: Position): Promise<void> {
     if (this.phase() !== 'player') return;
     this.busy = true;
+    this.notify();
     const moved = resolveMove(this.engine, this.store.currentTail, this.playerId, to);
     this.store.append(moved.events);
     await playToTail(this.store);
@@ -132,11 +138,16 @@ export class DuelSession {
     const weapon = mainWeaponInstanceId(this.store.currentTail.state, this.playerId);
     if (!weapon) return;
     this.busy = true;
-    const attack = this.engine.plan.attack(this.store.currentTail.state, {
-      attackerId: this.playerId,
-      targetId,
-      weaponInstanceId: weapon,
-    });
+    this.notify();
+    // The dice source rolls the attack: the engine's RNG (daily/seeded) or the
+    // player's own physical dice (manual), via the resumable roll seam.
+    const attack = await this.dice.resolve(() =>
+      this.engine.plan.attack(this.store.currentTail.state, {
+        attackerId: this.playerId,
+        targetId,
+        weaponInstanceId: weapon,
+      }),
+    );
     this.store.append(attack.events);
     await playToTail(this.store);
     this.busy = false;

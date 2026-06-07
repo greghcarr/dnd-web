@@ -1,5 +1,6 @@
 import type { RunConfig } from '@/game/run-config';
 import { dailySeed, dailyLabel } from '@/game/daily';
+import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 
 // Pre-duel menu: pick the Daily Challenge (fixed UTC-date seed, app dice,
 // the same battle for everyone today) or a Free Duel (random or typed seed,
@@ -31,8 +32,8 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
           <button type="button" class="start-reroll" aria-label="Random seed" title="Random seed">⟳</button>
         </div>
         <label class="start-manual">
-          <input type="checkbox" class="start-manual-check" disabled />
-          I'll provide my own dice rolls <span class="start-soon">(coming soon)</span>
+          <input type="checkbox" class="start-manual-check" />
+          I'll provide my own dice rolls
         </label>
         <button type="button" class="start-btn" data-start="free">Start Free Duel</button>
       </section>
@@ -49,6 +50,7 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
   const seedInput = select<HTMLInputElement>('.start-seed-input');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
   seedInput.value = String(randomSeed());
+  manualCheck.checked = getBoolSetting(SettingKey.ManualDice);
 
   select('.start-reroll').addEventListener('click', () => {
     seedInput.value = String(randomSeed());
@@ -59,6 +61,7 @@ export const mountStartScreen = (parent: HTMLElement, onBegin: (config: RunConfi
   select('[data-start="free"]').addEventListener('click', () => {
     const parsed = Number.parseInt(seedInput.value, 10);
     const seed = Number.isFinite(parsed) && parsed >= 0 ? parsed : randomSeed();
+    setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
     onBegin({ kind: 'free', seed, manualDice: manualCheck.checked });
   });
 

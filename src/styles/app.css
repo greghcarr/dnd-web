@@ -606,10 +606,6 @@ body {
   font-size: 0.82rem;
   color: var(--text-dim);
 }
-.start-soon {
-  font-size: 0.72rem;
-  opacity: 0.7;
-}
 .start-btn {
   min-height: 2.8rem;
   padding: 0.6rem 1rem;
@@ -629,6 +625,81 @@ body {
   border-color: var(--accent);
 }
 
+/* Manual-dice prompt: a small modal over the arena, one die at a time. */
+#dice-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.6);
+}
+#dice-prompt[hidden] {
+  display: none;
+}
+.dice-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+.dice-title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+.dice-context {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.dice-input {
+  padding: 0.6rem;
+  text-align: center;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 1.3rem;
+}
+.dice-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.dice-actions button {
+  flex: 1 1 0;
+  min-height: 2.7rem;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dice-submit {
+  background: rgba(74, 137, 255, 0.24);
+  border-color: var(--accent);
+}
+.dice-app {
+  background: rgba(35, 40, 52, 0.96);
+}
+.dice-rest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
 /* Phones / narrow screens: stack the map on top and the panels below,
    instead of an unusable 384px side column. */
 @media (max-width: 720px) {
@@ -646,9 +717,10 @@ body {
     width: 2.6rem;
     height: 2.6rem;
   }
-  /* The start menu fills the whole phone screen (not just the 42% map row),
-     so the card has room and isn't clipped by the panel area below. */
-  #start-screen {
+  /* The start menu and dice prompt fill the whole phone screen (not just the
+     42% map row), so the cards have room and aren't clipped by the panels. */
+  #start-screen,
+  #dice-prompt {
     position: fixed;
   }
   #layout {

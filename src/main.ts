@@ -17,7 +17,9 @@ import { ArenaInteraction } from '@/phaser/interaction';
 import { DuelSession } from '@/game/duel-session';
 import { DuelController } from '@/game/duel-controller';
 import type { RunConfig } from '@/game/run-config';
+import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
 import { mountStartScreen } from '@/ui/start-screen';
+import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 import { mountModeSelector } from '@/ui/mode-selector';
@@ -142,7 +144,11 @@ const boot = (): void => {
     // viewers) + the command bar overlaying the arena. "New Duel" (shown on
     // game over) returns to the start screen.
     function runDuel(config: RunConfig): () => void {
-      const duel = new DuelSession(bridge, config);
+      // Manual dice (player's own rolls) only in free duels; daily runs are
+      // app-rolled. The prompt overlays the arena.
+      const dicePrompt = mountDicePrompt(gameRoot);
+      const dice = config.manualDice ? new ManualDiceSource(dicePrompt.ask) : new SeededDiceSource();
+      const duel = new DuelSession(bridge, config, dice);
       router.setSource(duel.store);
       ctx.content.innerHTML = `
         <section id="event-inspector" class="panel" aria-label="Event log"></section>
@@ -154,6 +160,7 @@ const boot = (): void => {
       const inspector = mountEventInspector(inspectorEl, duel.store);
       const narrator = mountNarratorConsole(narratorEl, duel.store);
       const cleanup = (): void => {
+        dicePrompt.unmount();
         inspector.unmount();
         narrator.unmount();
         ctx.content.replaceChildren();
