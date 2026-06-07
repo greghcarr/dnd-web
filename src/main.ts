@@ -101,11 +101,9 @@ const boot = (): void => {
     layoutEl.classList.toggle('logs-collapsed', collapsed);
     logsToggle.textContent = collapsed ? '⟨' : '⟩';
     logsToggle.setAttribute('aria-label', collapsed ? 'Show logs' : 'Hide logs');
-    // Force the arena to re-fit after the grid reflows. The ResizeObserver
-    // also covers this, but hiding the whole column is a large mutation it can
-    // batch/defer, so refresh explicitly on the next frame (which re-emits
-    // RESIZE -> reframe).
-    requestAnimationFrame(() => game.scale.refresh());
+    // Re-fit the canvas after the grid reflows via the same window-resize path
+    // Phaser handles natively (the arena's ResizeObserver also covers this).
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
   let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed);
   applyLogsCollapsed(logsCollapsed);

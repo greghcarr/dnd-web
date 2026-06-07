@@ -108,13 +108,16 @@ export class ArenaScene extends Phaser.Scene {
     // stops re-centering. Observe the canvas parent directly, refresh the
     // scale manager to the new size, then reframe on the next frame (once the
     // canvas + camera have settled at that size).
-    const parent = this.scale.parent as HTMLElement | null;
-    if (parent && typeof ResizeObserver !== 'undefined') {
+    const arenaParent = this.game.canvas.parentElement;
+    if (arenaParent && typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => {
-        this.scale.refresh();
+        // Convert the element resize into a window resize: Phaser's RESIZE mode
+        // re-fits the canvas to its parent on the window 'resize' event, but
+        // scale.refresh() alone did not actually resize the canvas here.
+        window.dispatchEvent(new Event('resize'));
         this.scheduleReframe();
       });
-      this.resizeObserver.observe(parent);
+      this.resizeObserver.observe(arenaParent);
     }
     // The interaction channel is present only when a live duel is active; the
     // overlay graphics and tap handler are inert (no marks, no handler) in
