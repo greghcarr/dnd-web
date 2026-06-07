@@ -824,8 +824,12 @@ body {
     grid-template-columns: 100%;
     /* The arena takes the remaining space and the panel row sizes to its
        content, so collapsing the log panels grows the arena to fill the
-       screen (the arena's ResizeObserver re-fits the camera). */
-    grid-template-rows: 1fr auto;
+       screen (the arena's ResizeObserver re-fits the camera). minmax(0, 1fr)
+       (not a bare 1fr) is essential: a bare 1fr's min is the canvas's
+       intrinsic size, which lets the arena grow but never shrink back, so
+       after expand -> re-minimize it would stay stuck. A 0 minimum makes the
+       arena track purely the available space. */
+    grid-template-rows: minmax(0, 1fr) auto;
   }
   #right {
     grid-column: 1;
