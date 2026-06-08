@@ -135,7 +135,9 @@ const boot = (): void => {
     // Phaser handles natively (the arena's ResizeObserver also covers this).
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
-  let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed);
+  // Default the side panel to minimized so the arena leads; the toggle opens
+  // it and persists that choice.
+  let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed, true);
   applyLogsCollapsed(logsCollapsed);
   logsToggle.addEventListener('click', () => {
     logsCollapsed = !logsCollapsed;
