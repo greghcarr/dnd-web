@@ -4,12 +4,14 @@ import {
   DEFAULT_SEED,
   TACTICAL_DEFAULT_SEED,
   DEFAULT_LEVEL,
+  DAILY_LEVEL,
   DEFAULT_MODE,
   DEFAULT_VS,
   DEFAULT_APP_MODE_ID,
   INTERACTIVE_DUEL_MODE_ID,
   DUEL_CLASS_IDS,
 } from '@/constants/app';
+import { dailySeed, dailyClass } from '@/game/daily';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore } from '@/engine/replay-store';
@@ -57,6 +59,30 @@ const DEFAULT_CONFIG: BattleConfig = {
   movement: 'none',
 };
 
+// Describe today's daily player character for the start screen's daily tick,
+// e.g. "Level 5 Dragonborn Wizard". Built from the same seed + level + pinned
+// class + tactical config the daily duel uses (DuelSession), so the preview
+// matches the run. The class is pinned (dailyClass) so the daily is an exact,
+// replicable subset of the Free Duels.
+const describeDailyHero = (bridge: EngineBridge): string => {
+  const session = bridge.startBattle({
+    seed: dailySeed(),
+    mode: DEFAULT_MODE,
+    vs: DEFAULT_VS,
+    level: DAILY_LEVEL,
+    movement: 'tactical',
+    playerClass: dailyClass(),
+  });
+  const player = session.fullCampaign.state.characters[session.result.teamACharacterIds[0]!];
+  if (!player) return `Level ${DAILY_LEVEL}`;
+  const content = bridge.getContent();
+  const primary = player.classes.reduce((a, b) => (b.level > a.level ? b : a));
+  const totalLevel = player.classes.reduce((sum, c) => sum + c.level, 0);
+  const species = content.species.get(player.speciesId)?.name;
+  const className = content.classes.get(primary.classId)?.name ?? primary.classId;
+  return [`Level ${totalLevel}`, species, className].filter(Boolean).join(' ');
+};
+
 // Mode registry, keyed by the ids in APP_MODES. Both replay viewers reuse
 // the same panels; they differ in the movement kind of the battles they
 // generate and the seed each opens on. Add future modes here.
@@ -80,6 +106,10 @@ const boot = (): void => {
     id,
     name: bridge.getContent().classes.get(id)?.name ?? id,
   })).sort((a, b) => a.name.localeCompare(b.name));
+  // Today's daily hero, described from the same battle the daily duel builds
+  // (same seed + level + tactical config), e.g. "Level 5 Human Berserker
+  // Barbarian". Generated once at boot; deterministic, so it matches the run.
+  const dailyHero = describeDailyHero(bridge);
   let currentConfig: BattleConfig = { ...DEFAULT_CONFIG };
   let currentMovement: FuzzMovement = currentConfig.movement ?? 'none';
   const store = new ReplayStore(bridge.startBattle(currentConfig));
@@ -141,7 +171,7 @@ const boot = (): void => {
 
     // Pre-duel menu: choose Daily / Free, then begin.
     function showStart(): void {
-      const start = mountStartScreen(gameRoot, duelClassOptions, (config) => {
+      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, (config) => {
         start.unmount();
         teardownActive = runDuel(config);
       });

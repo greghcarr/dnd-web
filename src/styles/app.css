@@ -587,23 +587,23 @@ body {
   text-align: center;
   font-size: 1.5rem;
 }
-.start-section {
+.start-daily {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.9rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-}
-.start-section h2 {
-  margin: 0;
-  font-size: 1rem;
-}
-.start-note {
-  margin: 0;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
   font-size: 0.82rem;
-  color: var(--text-dim);
+  color: var(--text);
+  background: rgba(74, 137, 255, 0.1);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+/* Rows the daily tick locks: dimmed, and their controls disabled. */
+.start-locked {
+  opacity: 0.5;
+}
+.start-card :disabled {
+  cursor: not-allowed;
 }
 .start-seed {
   display: flex;
