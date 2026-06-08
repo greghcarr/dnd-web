@@ -230,16 +230,21 @@ export class DuelSession {
     this.notify();
     const base = this.store.currentTail;
     const intent = { combatantId: this.playerId };
-    const result =
-      action === 'dash'
-        ? this.engine.plan.dash(base.state, intent)
-        : action === 'disengage'
-          ? this.engine.plan.disengage(base.state, intent)
-          : this.engine.plan.dodge(base.state, intent);
-    this.store.append(result.events);
-    await playToTail(this.store);
+    try {
+      const result =
+        action === 'dash'
+          ? this.engine.plan.dash(base.state, intent)
+          : action === 'disengage'
+            ? this.engine.plan.disengage(base.state, intent)
+            : this.engine.plan.dodge(base.state, intent);
+      this.store.append(result.events);
+      await playToTail(this.store);
+      if (!this.diceRolledThisTurn) this.undoStack.push(base);
+    } catch {
+      // Action rejected by the engine (economy / state edge); abort cleanly
+      // rather than leaving the turn stuck mid-commit.
+    }
     this.busy = false;
-    if (!this.diceRolledThisTurn) this.undoStack.push(base);
     this.notify();
   }
 
@@ -248,17 +253,22 @@ export class DuelSession {
     this.busy = true;
     this.notify();
     const base = this.store.currentTail;
-    const moved = resolveMove(this.engine, base, this.playerId, to);
-    this.store.append(moved.events);
-    await playToTail(this.store);
-    this.busy = false;
-    if (moved.provokedAttack) {
-      // The move drew an opportunity attack (dice), which locks undo.
-      this.diceRolledThisTurn = true;
-      this.undoStack = [];
-    } else if (!this.diceRolledThisTurn) {
-      this.undoStack.push(base);
+    try {
+      const moved = resolveMove(this.engine, base, this.playerId, to);
+      this.store.append(moved.events);
+      await playToTail(this.store);
+      if (moved.provokedAttack) {
+        // The move drew an opportunity attack (dice), which locks undo.
+        this.diceRolledThisTurn = true;
+        this.undoStack = [];
+      } else if (!this.diceRolledThisTurn) {
+        this.undoStack.push(base);
+      }
+    } catch {
+      // Move rejected by the engine (illegal destination / state edge); abort
+      // cleanly rather than leaving the turn stuck mid-commit.
     }
+    this.busy = false;
     this.notify();
   }
 
@@ -268,21 +278,26 @@ export class DuelSession {
     if (!weapon) return;
     this.busy = true;
     this.notify();
-    // The dice source rolls the attack: the engine's RNG (daily/seeded) or the
-    // player's own physical dice (manual), via the resumable roll seam.
-    const attack = await this.dice.resolve(() =>
-      this.engine.plan.attack(this.store.currentTail.state, {
-        attackerId: this.playerId,
-        targetId,
-        weaponInstanceId: weapon,
-      }),
-    );
-    this.store.append(attack.events);
-    await playToTail(this.store);
+    try {
+      // The dice source rolls the attack: the engine's RNG (daily/seeded) or
+      // the player's own physical dice (manual), via the resumable roll seam.
+      const attack = await this.dice.resolve(() =>
+        this.engine.plan.attack(this.store.currentTail.state, {
+          attackerId: this.playerId,
+          targetId,
+          weaponInstanceId: weapon,
+        }),
+      );
+      this.store.append(attack.events);
+      await playToTail(this.store);
+      // The attack rolled dice; that locks undo for the rest of the turn.
+      this.diceRolledThisTurn = true;
+      this.undoStack = [];
+    } catch {
+      // Attack rejected (e.g. target out of reach, or an engine edge past the
+      // affordance check); abort cleanly rather than freezing the turn.
+    }
     this.busy = false;
-    // The attack rolled dice; that locks undo for the rest of the turn.
-    this.diceRolledThisTurn = true;
-    this.undoStack = [];
     this.notify();
   }
 
