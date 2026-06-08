@@ -4,7 +4,7 @@ import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import type { FormationBounds, Team } from '@/spatial/formation';
 import { combatantPositions, cellOf } from '@/spatial/engine-positions';
-import { TokenView } from '@/phaser/tokens/TokenView';
+import { TokenView, type TokenBadge } from '@/phaser/tokens/TokenView';
 import { registerCharacterAnims } from '@/phaser/anims';
 import { frameBounds } from '@/phaser/camera';
 import { fitGameToParent } from '@/phaser/render-scale';
@@ -132,7 +132,12 @@ export class ArenaScene extends Phaser.Scene {
     this.interaction = this.registry.get('interaction') as ArenaInteraction | undefined;
     if (this.interaction) {
       this.overlay = this.add.graphics().setDepth(RENDER_DEPTH.OVERLAY);
-      this.interactionUnsub = this.interaction.onChange(() => this.drawOverlay());
+      // Redraw the overlay and re-fit the camera so revealed cells (e.g. the
+      // Move squares) all come into view, snapping back when they clear.
+      this.interactionUnsub = this.interaction.onChange(() => {
+        this.drawOverlay();
+        this.frameForMarks(true);
+      });
       this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.drawOverlay();
     }
@@ -419,7 +424,7 @@ export class ArenaScene extends Phaser.Scene {
         spriteKeyFor(kind, index),
         character?.name ?? id,
         nameOutlineColor(character, placement.team),
-        id === session.playerId,
+        badgeFor(id, session.playerId),
       );
       this.tokens.set(id, token);
     }
@@ -445,16 +450,30 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  // The single event just crossed by a forward step drives a reaction:
-  // the attacker lunges, or the damaged combatant flashes.
+  // The single event just crossed by a forward step drives a reaction: the
+  // attacker turns to face its target and lunges, a caster turns to face its
+  // target, or the damaged combatant flashes.
   private reactToEvent(snapshot: ReplaySnapshot): void {
     const event = snapshot.session.fullCampaign.events[snapshot.cursor - 1];
     if (!event) return;
     if (event.type === 'AttackRolled') {
+      this.faceTokenToward(event.attackerId, event.targetId);
       this.tokens.get(event.attackerId)?.playAttack();
+    } else if (event.type === 'SpellCastDeclared') {
+      this.faceTokenToward(event.characterId, event.targetIds[0]);
     } else if (event.type === 'DamageApplied') {
       this.tokens.get(event.targetId)?.flashHit();
     }
+  }
+
+  // Turn one combatant's token to face another (an attack or spell target), so
+  // the avatar looks at who it acts on. No-op if either token is absent or the
+  // target is the actor itself (e.g. a self-targeted spell).
+  private faceTokenToward(actorId: string, targetId: string | undefined): void {
+    if (targetId === undefined || targetId === actorId) return;
+    const actor = this.tokens.get(actorId);
+    const target = this.tokens.get(targetId);
+    if (actor && target) actor.faceToward(target.worldX);
   }
 
   // Paint the interactive-duel cell overlay: green for reachable move cells,
@@ -499,8 +518,13 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   // Resize handler: re-fit the camera to the current state (never animated).
+  // Keeps the marked-cell framing if a selection (e.g. Move) is active.
   private reframe(): void {
-    this.frameCamera(false);
+    if (this.interaction && this.interaction.getMarks().length > 0) {
+      this.frameForMarks(false);
+    } else {
+      this.frameCamera(false);
+    }
   }
 
   private frameCamera(animate: boolean): void {
@@ -518,34 +542,70 @@ export class ArenaScene extends Phaser.Scene {
   // (so a felled combatant doesn't drag the view), falling back to the whole
   // map if none are standing.
   private frameTactical(map: LocationMap, animate: boolean): void {
+    frameBounds(this.cameras.main, this.livingCombatantBounds() ?? wholeMapBounds(map), animate);
+  }
+
+  // Bounds of the living combatants at the current cursor; undefined if none
+  // are standing (or no positioned battle is loaded).
+  private livingCombatantBounds(): FormationBounds | undefined {
     const snapshot = this.lastSnapshot;
     const session = this.currentSession;
-    if (!snapshot || !session) return;
-    const cellSize = map.cellSizeFeet;
+    if (!snapshot || !session?.map) return undefined;
+    const cellSize = session.map.cellSizeFeet;
     let bounds: FormationBounds | undefined;
     for (const combatant of combatantPositions(snapshot.campaign, session.encounterId)) {
       if (!combatant.position) continue;
       const character = snapshot.campaign.state.characters[combatant.combatantId];
       if (character && character.hp.current <= 0) continue;
       const { col, row } = cellOf(combatant.position, cellSize);
-      bounds = bounds
-        ? {
-            minCol: Math.min(bounds.minCol, col),
-            maxCol: Math.max(bounds.maxCol, col),
-            minRow: Math.min(bounds.minRow, row),
-            maxRow: Math.max(bounds.maxRow, row),
-          }
-        : { minCol: col, maxCol: col, minRow: row, maxRow: row };
+      bounds = expandBounds(bounds, col, row);
     }
-    const target = bounds ?? {
-      minCol: 0,
-      maxCol: map.widthCells - 1,
-      minRow: 0,
-      maxRow: map.heightCells - 1,
-    };
-    frameBounds(this.cameras.main, target, animate);
+    return bounds;
+  }
+
+  // When the player has cells marked (e.g. Move's reachable squares), frame
+  // the living combatants together with every marked cell so all the options
+  // are visible at once; restore the normal combatant framing when cleared.
+  private frameForMarks(animate: boolean): void {
+    if (!this.interaction || !this.currentSession?.map) return;
+    const marks = this.interaction.getMarks();
+    if (marks.length === 0) {
+      this.frameCamera(animate);
+      return;
+    }
+    let bounds = this.livingCombatantBounds();
+    for (const mark of marks) bounds = expandBounds(bounds, mark.col, mark.row);
+    if (bounds) frameBounds(this.cameras.main, bounds, animate);
   }
 }
+
+const wholeMapBounds = (map: LocationMap): FormationBounds => ({
+  minCol: 0,
+  maxCol: map.widthCells - 1,
+  minRow: 0,
+  maxRow: map.heightCells - 1,
+});
+
+const expandBounds = (
+  bounds: FormationBounds | undefined,
+  col: number,
+  row: number,
+): FormationBounds =>
+  bounds
+    ? {
+        minCol: Math.min(bounds.minCol, col),
+        maxCol: Math.max(bounds.maxCol, col),
+        minRow: Math.min(bounds.minRow, row),
+        maxRow: Math.max(bounds.maxRow, row),
+      }
+    : { minCol: col, maxCol: col, minRow: row, maxRow: row };
+
+// Who controls a combatant in an interactive duel: the player gets the "1P"
+// badge, everyone else "CPU". Replay viewers (no playerId) get no badge.
+const badgeFor = (id: string, playerId: string | undefined): TokenBadge | undefined => {
+  if (playerId === undefined) return undefined;
+  return id === playerId ? 'player' : 'cpu';
+};
 
 // A combatant's most-advanced class (the colour-defining one for multiclass).
 const primaryClassId = (character: Character): string =>

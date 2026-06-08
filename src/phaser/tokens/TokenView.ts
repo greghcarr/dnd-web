@@ -37,7 +37,8 @@ import {
   HP_BAR_LOW_THRESHOLD,
   HIT_FLASH_COLOR,
   PLAYER_BADGE_BG_COLOR,
-  PLAYER_BADGE_TEXT_COLOR,
+  CPU_BADGE_BG_COLOR,
+  BADGE_TEXT_COLOR,
   cssHex,
 } from '@/constants/colors';
 
@@ -57,13 +58,18 @@ const LABEL_FILTER = Phaser.Textures.FilterMode.LINEAR;
 // on a phone where the whole arena is fit into a small viewport.
 const HP_FONT_PX = '11px';
 const NAME_FONT_PX = '13px';
-// The "1P" badge on the player-controlled combatant's name: a small pill
-// sitting just left of the name.
-const PLAYER_BADGE_LABEL = '1P';
-const BADGE_FONT_PX = '10px';
-const BADGE_PAD_X = 3;
+// A small pill just left of a combatant's name marking who controls it in
+// the interactive duel: "1P" (red) for the player, "CPU" (gray) for the
+// opponent. Absent in the replay viewers.
+export type TokenBadge = 'player' | 'cpu';
+const BADGE_SPECS: Record<TokenBadge, { readonly label: string; readonly bg: number }> = {
+  player: { label: '1P', bg: PLAYER_BADGE_BG_COLOR },
+  cpu: { label: 'CPU', bg: CPU_BADGE_BG_COLOR },
+};
+const BADGE_FONT_PX = '5px';
+const BADGE_PAD_X = 2;
 const BADGE_PAD_Y = 1;
-const BADGE_GAP_PX = 3;
+const BADGE_GAP_PX = 2;
 // Feet sit at the container origin (the tile ground point); the head is
 // this far above it, so the HP bar and name sit just above the head.
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
@@ -88,7 +94,7 @@ export class TokenView {
   private readonly hpFill: Phaser.GameObjects.Rectangle;
   private readonly hpText: Phaser.GameObjects.Text;
   private readonly nameText: Phaser.GameObjects.Text;
-  private readonly playerBadge?: Phaser.GameObjects.Text;
+  private readonly badge?: Phaser.GameObjects.Text;
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -106,7 +112,7 @@ export class TokenView {
     characterKey: string,
     name: string,
     nameOutlineColor: number,
-    isPlayer: boolean,
+    badge: TokenBadge | undefined,
   ) {
     this.scene = scene;
     this.characterKey = characterKey;
@@ -161,19 +167,20 @@ export class TokenView {
     this.hpText.texture.setFilter(LABEL_FILTER);
     this.nameText.texture.setFilter(LABEL_FILTER);
 
-    // Mark the player-controlled combatant with a "1P" pill left of the name.
-    if (isPlayer) {
-      this.playerBadge = scene.add
-        .text(0, NAME_Y, PLAYER_BADGE_LABEL, {
+    // Mark who controls this combatant with a pill left of the name.
+    if (badge) {
+      const spec = BADGE_SPECS[badge];
+      this.badge = scene.add
+        .text(0, NAME_Y, spec.label, {
           fontFamily: 'monospace',
           fontSize: BADGE_FONT_PX,
-          color: cssHex(PLAYER_BADGE_TEXT_COLOR),
-          backgroundColor: cssHex(PLAYER_BADGE_BG_COLOR),
+          color: cssHex(BADGE_TEXT_COLOR),
+          backgroundColor: cssHex(spec.bg),
           padding: { x: BADGE_PAD_X, y: BADGE_PAD_Y },
           resolution: LABEL_RESOLUTION,
         })
-        .setOrigin(1, 1);
-      this.playerBadge.texture.setFilter(LABEL_FILTER);
+        .setOrigin(1, 0.5);
+      this.badge.texture.setFilter(LABEL_FILTER);
     }
 
     const children: Phaser.GameObjects.GameObject[] = [
@@ -184,10 +191,10 @@ export class TokenView {
       this.hpText,
       this.nameText,
     ];
-    if (this.playerBadge) children.push(this.playerBadge);
+    if (this.badge) children.push(this.badge);
     this.container = scene.add.container(x, y, children);
     this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
-    this.layoutPlayerBadge();
+    this.layoutBadge();
     this.drawRing(false);
   }
 
@@ -242,16 +249,20 @@ export class TokenView {
     label.texture.setFilter(LABEL_FILTER);
   }
 
-  // Set the name label and keep the player badge tucked against its left edge
-  // (the name is center-anchored, so the badge position depends on its width).
+  // Set the name label and keep the badge tucked against its left edge,
+  // vertically centered on the name text (the name is center/bottom-anchored,
+  // so the badge position depends on its width and height).
   private setName(name: string): void {
     this.setLabel(this.nameText, name);
-    this.layoutPlayerBadge();
+    this.layoutBadge();
   }
 
-  private layoutPlayerBadge(): void {
-    if (!this.playerBadge) return;
-    this.playerBadge.setPosition(-this.nameText.displayWidth / 2 - BADGE_GAP_PX, NAME_Y);
+  private layoutBadge(): void {
+    if (!this.badge) return;
+    this.badge.setPosition(
+      -this.nameText.displayWidth / 2 - BADGE_GAP_PX,
+      NAME_Y - this.nameText.displayHeight / 2,
+    );
   }
 
   // Declarative: reflect the engine state at the cursor.
@@ -302,6 +313,19 @@ export class TokenView {
     if (!this.dead && !this.sprite.anims.isPlaying) {
       this.sprite.setTexture(this.idleTexture, this.restFrame);
     }
+  }
+
+  // This token's world x, so the scene can turn one combatant to face another.
+  get worldX(): number {
+    return this.container.x;
+  }
+
+  // Turn to face a target at the given world x (the combatant being attacked
+  // or targeted by a spell), so the avatar looks at who it acts on. Same-column
+  // targets keep the current facing.
+  faceToward(targetX: number): void {
+    const dx = targetX - this.container.x;
+    if (Math.abs(dx) > 0.5) this.setFacing(dx > 0 ? 'right' : 'left');
   }
 
   // Reflect a position change at the cursor (tactical mode): slide to the

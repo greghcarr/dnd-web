@@ -28,9 +28,11 @@ export const CLASS_NAME_OUTLINE_COLORS: Readonly<Record<string, number>> = {
   wizard: 0x2a50a1,
 };
 
-// The "1P" badge marking the player-controlled combatant's name.
-export const PLAYER_BADGE_BG_COLOR = 0xffc857;
-export const PLAYER_BADGE_TEXT_COLOR = 0x1a1a1a;
+// Name badges on combatant tokens in the interactive duel: "1P" on the
+// player (pure red), "CPU" on the opponent (gray); white text on both.
+export const PLAYER_BADGE_BG_COLOR = 0xff0000;
+export const CPU_BADGE_BG_COLOR = 0x6b7280;
+export const BADGE_TEXT_COLOR = 0xffffff;
 
 export const ACTIVE_RING_COLOR = 0xffd54a;
 export const DOWNED_TINT = 0x555555;

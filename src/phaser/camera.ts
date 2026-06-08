@@ -36,8 +36,12 @@ export const frameBounds = (
   const cy = (top + bottom) / 2;
 
   if (animate) {
-    camera.pan(cx, cy, CAMERA_PAN_MS, 'Quad.easeInOut');
-    camera.zoomTo(zoom, CAMERA_PAN_MS, 'Quad.easeInOut');
+    // force=true: a new framing (e.g. after a move) must override any in-flight
+    // pan/zoom, or Phaser's effect ignores it (its start() early-returns while
+    // running) and the camera finishes the stale animation instead. This is
+    // what left the camera stuck zoomed-out after a move made mid-zoom-out.
+    camera.pan(cx, cy, CAMERA_PAN_MS, 'Quad.easeInOut', true);
+    camera.zoomTo(zoom, CAMERA_PAN_MS, 'Quad.easeInOut', true);
   } else {
     // Cancel any in-flight pan/zoom from a prior animated step; otherwise the
     // running tween keeps updating the camera after this snap and the view
