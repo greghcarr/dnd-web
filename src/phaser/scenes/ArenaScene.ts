@@ -866,7 +866,7 @@ const turnRelation = (
 // The turn banner's wording per relation (the active combatant's name fills the
 // ally/enemy forms).
 const TURN_BANNER_LABELS: Readonly<Record<TurnRelation, (name: string) => string>> = {
-  self: () => 'Your turn',
+  self: (name) => `Your (${name}'s) turn`,
   ally: (name) => `(Ally) ${name}'s turn`,
   enemy: (name) => `(Enemy) ${name}'s turn`,
 };
