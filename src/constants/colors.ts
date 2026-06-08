@@ -29,8 +29,8 @@ export const CLASS_NAME_OUTLINE_COLORS: Readonly<Record<string, number>> = {
 };
 
 // Name badges on combatant tokens in the interactive duel: "1P" on the
-// player (pure red), "CPU" on the opponent (gray); white text on both.
-export const PLAYER_BADGE_BG_COLOR = 0xff0000;
+// player (pure blue), "CPU" on the opponent (gray); white text on both.
+export const PLAYER_BADGE_BG_COLOR = 0x0000ff;
 export const CPU_BADGE_BG_COLOR = 0x6b7280;
 export const BADGE_TEXT_COLOR = 0xffffff;
 

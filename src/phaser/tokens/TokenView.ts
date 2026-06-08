@@ -67,6 +67,11 @@ const BADGE_SPECS: Record<TokenBadge, { readonly label: string; readonly bg: num
   cpu: { label: 'CPU', bg: CPU_BADGE_BG_COLOR },
 };
 const BADGE_FONT_PX = '5px';
+// The badges read as plain labels, so they use a simple sans-serif (the app's
+// system sans) rather than the monospace of the name/HP text.
+const BADGE_FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+// Pill corner radius as a fraction of its height (0.5 = full capsule).
+const BADGE_PILL_RADIUS_FRAC = 0.35;
 const BADGE_PAD_X = 2;
 const BADGE_PAD_Y = 1;
 const BADGE_GAP_PX = 2;
@@ -95,6 +100,10 @@ export class TokenView {
   private readonly hpText: Phaser.GameObjects.Text;
   private readonly nameText: Phaser.GameObjects.Text;
   private readonly badge?: Phaser.GameObjects.Text;
+  // Rounded-rect pill behind the badge text (Phaser text backgrounds are
+  // square, so the pill is drawn separately).
+  private readonly badgePill?: Phaser.GameObjects.Graphics;
+  private readonly badgeColor?: number;
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -167,16 +176,17 @@ export class TokenView {
     this.hpText.texture.setFilter(LABEL_FILTER);
     this.nameText.texture.setFilter(LABEL_FILTER);
 
-    // Mark who controls this combatant with a pill left of the name.
+    // Mark who controls this combatant with a rounded pill left of the name:
+    // a separate rounded-rect behind the label (drawn/positioned in layoutBadge).
     if (badge) {
       const spec = BADGE_SPECS[badge];
+      this.badgeColor = spec.bg;
+      this.badgePill = scene.add.graphics();
       this.badge = scene.add
         .text(0, NAME_Y, spec.label, {
-          fontFamily: 'monospace',
+          fontFamily: BADGE_FONT_FAMILY,
           fontSize: BADGE_FONT_PX,
           color: cssHex(BADGE_TEXT_COLOR),
-          backgroundColor: cssHex(spec.bg),
-          padding: { x: BADGE_PAD_X, y: BADGE_PAD_Y },
           resolution: LABEL_RESOLUTION,
         })
         .setOrigin(1, 0.5);
@@ -191,7 +201,7 @@ export class TokenView {
       this.hpText,
       this.nameText,
     ];
-    if (this.badge) children.push(this.badge);
+    if (this.badgePill && this.badge) children.push(this.badgePill, this.badge);
     this.container = scene.add.container(x, y, children);
     this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
     this.layoutBadge();
@@ -258,11 +268,17 @@ export class TokenView {
   }
 
   private layoutBadge(): void {
-    if (!this.badge) return;
-    this.badge.setPosition(
-      -this.nameText.displayWidth / 2 - BADGE_GAP_PX,
-      NAME_Y - this.nameText.displayHeight / 2,
-    );
+    if (!this.badge || !this.badgePill) return;
+    // The label is right/middle-anchored just left of the name; the pill wraps
+    // it with padding and fully rounded ends (radius = half its height).
+    const bx = -this.nameText.displayWidth / 2 - BADGE_GAP_PX;
+    const by = NAME_Y - this.nameText.displayHeight / 2;
+    this.badge.setPosition(bx, by);
+    const w = this.badge.displayWidth + BADGE_PAD_X * 2;
+    const h = this.badge.displayHeight + BADGE_PAD_Y * 2;
+    this.badgePill.clear();
+    this.badgePill.fillStyle(this.badgeColor ?? 0, 1);
+    this.badgePill.fillRoundedRect(bx - this.badge.displayWidth - BADGE_PAD_X, by - h / 2, w, h, h * BADGE_PILL_RADIUS_FRAC);
   }
 
   // Declarative: reflect the engine state at the cursor.
