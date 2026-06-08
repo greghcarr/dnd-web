@@ -2,11 +2,17 @@ import type { DuelPhase } from '@/game/duel-session';
 
 // The bottom-of-screen command bar for the interactive duel. Touch-first:
 // large tap targets, overlays the arena, and the row wraps on narrow phones.
-// Move is live; Actions holds Attack plus Dash / Disengage / Dodge; Bonus /
-// Spells / Items are greyed scaffolds. The controller drives it via render().
+// A resources row (movement left + action/bonus/reaction pips) sits just above
+// the buttons. Move is live; Actions holds Attack plus Dash / Disengage /
+// Dodge; Bonus / Spells / Items are greyed scaffolds. The controller drives it
+// via render().
 
 export interface CommandBarView {
   readonly phase: DuelPhase;
+  readonly movementText: string;
+  readonly action: boolean;
+  readonly bonus: boolean;
+  readonly reaction: boolean;
   readonly canMove: boolean;
   readonly canActions: boolean;
   readonly canBonus: boolean;
@@ -37,6 +43,12 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const bar = document.createElement('div');
   bar.id = 'command-bar';
   bar.innerHTML = `
+    <div class="cmd-economy">
+      <span class="cmd-move-left"></span>
+      <span class="cmd-pip" data-pip="action" title="Action">A</span>
+      <span class="cmd-pip" data-pip="bonus" title="Bonus action">B</span>
+      <span class="cmd-pip" data-pip="reaction" title="Reaction">R</span>
+    </div>
     <div class="cmd-buttons">
       <button type="button" class="cmd-btn" data-cmd="move">Move</button>
       <button type="button" class="cmd-btn" data-cmd="actions">Actions</button>
@@ -62,6 +74,10 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const undoBtn = select<HTMLButtonElement>('[data-cmd="undo"]');
   const endBtn = select<HTMLButtonElement>('[data-cmd="end"]');
   const quitBtn = select<HTMLButtonElement>('[data-cmd="quit"]');
+  const moveLeftEl = select('.cmd-move-left');
+  const actionPip = select('[data-pip="action"]');
+  const bonusPip = select('[data-pip="bonus"]');
+  const reactionPip = select('[data-pip="reaction"]');
 
   moveBtn.addEventListener('click', handlers.onMove);
   actionsBtn.addEventListener('click', handlers.onActions);
@@ -74,6 +90,10 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
 
   return {
     render(view: CommandBarView): void {
+      moveLeftEl.textContent = view.movementText;
+      actionPip.classList.toggle('spent', !view.action);
+      bonusPip.classList.toggle('spent', !view.bonus);
+      reactionPip.classList.toggle('spent', !view.reaction);
       moveBtn.disabled = !view.canMove;
       actionsBtn.disabled = !view.canActions;
       bonusBtn.disabled = !view.canBonus;

@@ -7,7 +7,6 @@ import type {
 } from './duel-session';
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
-import { mountTurnEconomy, type TurnEconomy } from '@/ui/command-bar/turn-economy';
 import { mountOptionMenu, type OptionMenu, type MenuOption } from '@/ui/command-bar/option-menu';
 import { mountEndScreen, type EndScreen } from '@/ui/end-screen';
 import { mountConfirmDialog, type ConfirmDialog } from '@/ui/confirm-dialog';
@@ -42,7 +41,6 @@ type Pending =
 export class DuelController {
   private pending: Pending | null = null;
   private readonly bar: CommandBar;
-  private readonly economyBar: TurnEconomy;
   private readonly menu: OptionMenu;
   private readonly confirm: ConfirmDialog;
   private endScreen?: EndScreen;
@@ -70,7 +68,6 @@ export class DuelController {
       },
       onQuit: () => this.confirmQuit(),
     });
-    this.economyBar = mountTurnEconomy(gameRoot);
     this.menu = mountOptionMenu(gameRoot);
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
     this.unsubscribeDuel = this.duel.onChange(() => this.refresh());
@@ -95,7 +92,6 @@ export class DuelController {
     this.menu.unmount();
     this.confirm.unmount();
     this.endScreen?.unmount();
-    this.economyBar.unmount();
     this.bar.unmount();
   }
 
@@ -331,17 +327,12 @@ export class DuelController {
         !economy.bonusActionAvailable
       : false;
     const selecting = this.pending?.kind === 'move' ? 'move' : null;
-    // The turn resources read together with the turn banner at the top, shown
-    // through the player's turn (including the brief busy state mid-commit).
-    this.economyBar.render({
-      visible: phase === 'player' || phase === 'busy',
+    this.bar.render({
+      phase,
       movementText: economy ? `Move ${economy.movement.remainingFeet}/${economy.movement.totalFeet} ft` : '',
       action: economy?.actionAvailable ?? false,
       bonus: economy?.bonusActionAvailable ?? false,
       reaction: economy?.reactionAvailable ?? false,
-    });
-    this.bar.render({
-      phase,
       canMove: phase === 'player' && this.duel.moveDestinations().length > 0,
       canActions: phase === 'player' && this.actionOptions().some((option) => option.enabled),
       canBonus:
