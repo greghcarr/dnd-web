@@ -406,20 +406,26 @@ body {
 #command-bar > * {
   pointer-events: auto;
 }
-.cmd-status {
-  align-self: center;
+/* The player's turn resources (movement left + action/bonus/reaction pips),
+   a HUD strip just below the turn banner at the top of the arena. Never
+   captures taps. Hidden when it isn't the player's turn. */
+#turn-economy {
+  position: absolute;
+  top: 18.5%;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.6rem;
+  pointer-events: none;
   font-family: var(--mono);
   font-size: 0.82rem;
   color: var(--text);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
-.cmd-economy {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
+#turn-economy[hidden] {
+  display: none;
 }
 .cmd-pip {
   display: inline-flex;
