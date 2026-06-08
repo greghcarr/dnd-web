@@ -543,7 +543,7 @@ export class ArenaScene extends Phaser.Scene {
       this.tokens.get(event.targetId)?.flashHit();
     }
     // Pop floating "combat text" above the affected combatant(s) for the event.
-    for (const entry of floatingEventEntries(event, snapshot.session.content)) {
+    for (const entry of floatingEventEntries(event, snapshot.campaign.state, snapshot.session.content)) {
       this.tokens.get(entry.subjectId)?.addFloatingText(entry.label);
     }
   }
