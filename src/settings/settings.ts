@@ -6,7 +6,6 @@
 const PREFIX = 'dnd-web:';
 
 export const SettingKey = {
-  LogsCollapsed: 'logs-collapsed',
   ManualDice: 'manual-dice',
 } as const;
 export type SettingKey = (typeof SettingKey)[keyof typeof SettingKey];

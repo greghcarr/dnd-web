@@ -24,7 +24,6 @@ import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
 import { mountStartScreen } from '@/ui/start-screen';
 import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
-import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 import { mountModeSelector } from '@/ui/mode-selector';
 import { mountEventInspector } from '@/ui/inspector/event-inspector';
 import { mountNarratorConsole } from '@/ui/console/narrator-console';
@@ -135,13 +134,12 @@ const boot = (): void => {
     // Phaser handles natively (the arena's ResizeObserver also covers this).
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
-  // Default the side panel to minimized so the arena leads; the toggle opens
-  // it and persists that choice.
-  let logsCollapsed = getBoolSetting(SettingKey.LogsCollapsed, true);
+  // Always start with the side panel minimized so the arena leads; the toggle
+  // opens/closes it for the session (the choice isn't persisted).
+  let logsCollapsed = true;
   applyLogsCollapsed(logsCollapsed);
   logsToggle.addEventListener('click', () => {
     logsCollapsed = !logsCollapsed;
-    setBoolSetting(SettingKey.LogsCollapsed, logsCollapsed);
     applyLogsCollapsed(logsCollapsed);
   });
 
