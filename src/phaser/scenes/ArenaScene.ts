@@ -51,6 +51,20 @@ const FENCE_WOOD_MED = 0x7a5230;
 const FENCE_WOOD_LIGHT = 0x9c6b3e;
 const PROP_OFFSET_X = GRID_TILE_PX * 0.5;
 const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
+// An occluding prop fades to this alpha while a character stands behind it, so
+// the character isn't hidden.
+const OCCLUDER_FADE_ALPHA = 0.5;
+
+// A prop that can hide a combatant standing behind it: trees, bushes, boulders,
+// and decorative stones. `tall` props (trees, boulders) are impassable cover
+// drawn over the cell to their north, so a combatant one row up is occluded;
+// short props (brush, decor) cover their own cell, where a combatant stands.
+interface Occluder {
+  readonly image: Phaser.GameObjects.Image;
+  readonly col: number;
+  readonly row: number;
+  readonly tall: boolean;
+}
 
 // Tactical-arena terrain rendering, seed-deterministic for variety:
 // impassable cover blocks sight/movement (tall trees, varied), difficult
@@ -89,6 +103,8 @@ export class ArenaScene extends Phaser.Scene {
   private store!: SnapshotSource;
   private readonly tokens = new Map<string, TokenView>();
   private scenery: Phaser.GameObjects.GameObject[] = [];
+  // Props that fade when a combatant stands behind them (see setStates).
+  private occluders: Occluder[] = [];
   private currentSession?: Session;
   private fenceBounds?: FormationBounds;
   private prevCursor = 0;
@@ -189,6 +205,7 @@ export class ArenaScene extends Phaser.Scene {
     this.tokens.clear();
     for (const object of this.scenery) object.destroy();
     this.scenery = [];
+    this.occluders = [];
 
     if (session.map) {
       this.buildTacticalArena(session, session.map);
@@ -280,6 +297,8 @@ export class ArenaScene extends Phaser.Scene {
         if (rng() < 0.5) prop.setFlipX(true);
         prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
         this.scenery.push(prop);
+        // Positionless scatter: trees are tall cover, everything else low.
+        this.registerOccluder(prop, col, row, spec.key.startsWith('tree'));
       }
     }
   }
@@ -295,17 +314,22 @@ export class ArenaScene extends Phaser.Scene {
         const terrain = map.terrain[row]?.[col];
         if (terrain === 'impassable') {
           if (border.has(`${col},${row}`)) {
+            // Boulders: impassable cover, so they hide a combatant to the north.
             this.placeProp(pick(BORDER_ROCK_KEYS, rng), col, row, {
               flip: rng() < 0.5,
               scale: BORDER_ROCK_SCALE_MIN + rng() * (BORDER_ROCK_SCALE_MAX - BORDER_ROCK_SCALE_MIN),
+              tall: true,
             });
           } else {
+            // Trees: tall cover, hide a combatant to the north.
             this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
               flip: rng() < 0.5,
               scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
+              tall: true,
             });
           }
         } else if (terrain === 'difficult') {
+          // Brush: low, a combatant stands in it (same cell).
           this.placeProp(pick(BRUSH_PROP_KEYS, rng), col, row, { flip: rng() < 0.5 });
         } else if (terrain === 'water') {
           this.tintCell(col, row, WATER_TINT_COLOR, WATER_TINT_ALPHA);
@@ -373,7 +397,7 @@ export class ArenaScene extends Phaser.Scene {
     key: string,
     col: number,
     row: number,
-    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number } = {},
+    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number; tall?: boolean } = {},
   ): void {
     const spec = PROP_SPECS.find((s) => s.key === key);
     if (!spec) return;
@@ -384,6 +408,13 @@ export class ArenaScene extends Phaser.Scene {
     if (opts.flip) prop.setFlipX(true);
     prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
     this.scenery.push(prop);
+    this.registerOccluder(prop, col, row, opts.tall ?? false);
+  }
+
+  // Track a prop so it can fade when a combatant stands behind it. `tall`
+  // (impassable cover) covers the cell to its north; otherwise its own cell.
+  private registerOccluder(image: Phaser.GameObjects.Image, col: number, row: number, tall: boolean): void {
+    this.occluders.push({ image, col, row, tall });
   }
 
   private tintCell(col: number, row: number, color: number, alpha: number): void {
@@ -454,12 +485,28 @@ export class ArenaScene extends Phaser.Scene {
     // no-ops when the tile is unchanged, so only real moves animate/snap.
     if (!session.map) return;
     const cellSize = session.map.cellSizeFeet;
+    const occupied = new Set<string>();
     for (const combatant of combatantPositions(campaign, session.encounterId)) {
       if (!combatant.position) continue;
+      const { col, row } = cellOf(combatant.position, cellSize);
+      occupied.add(`${col},${row}`);
       const token = this.tokens.get(combatant.combatantId);
       if (!token) continue;
-      const { col, row } = cellOf(combatant.position, cellSize);
       token.moveTo(col, row, animateMoves);
+    }
+    this.updateOccluders(occupied);
+  }
+
+  // Fade an occluding prop to OCCLUDER_FADE_ALPHA while a combatant stands
+  // behind it: a tall prop (tree/boulder) covers the cell to its north (so the
+  // combatant is one row up); a short prop (brush/decor) covers its own cell.
+  // Otherwise it shows fully.
+  private updateOccluders(occupied: ReadonlySet<string>): void {
+    for (const occluder of this.occluders) {
+      const behind = occluder.tall
+        ? occupied.has(`${occluder.col},${occluder.row - 1}`)
+        : occupied.has(`${occluder.col},${occluder.row}`);
+      occluder.image.setAlpha(behind ? OCCLUDER_FADE_ALPHA : 1);
     }
   }
 
