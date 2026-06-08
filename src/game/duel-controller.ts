@@ -10,6 +10,7 @@ import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
 import { mountOptionMenu, type OptionMenu, type MenuOption } from '@/ui/command-bar/option-menu';
 import { mountEndScreen, type EndScreen } from '@/ui/end-screen';
+import { mountConfirmDialog, type ConfirmDialog } from '@/ui/confirm-dialog';
 import { cellOf } from '@/spatial/engine-positions';
 
 const SIMPLE_ACTION_LABELS: Record<SimpleAction, string> = {
@@ -51,6 +52,7 @@ export class DuelController {
   private pending: Pending | null = null;
   private readonly bar: CommandBar;
   private readonly menu: OptionMenu;
+  private readonly confirm: ConfirmDialog;
   private endScreen?: EndScreen;
   private readonly unsubscribeDuel: () => void;
 
@@ -60,6 +62,7 @@ export class DuelController {
     private readonly gameRoot: HTMLElement,
     private readonly onNewDuel: () => void,
   ) {
+    this.confirm = mountConfirmDialog(gameRoot);
     this.bar = mountCommandBar(gameRoot, {
       onMove: () => this.toggleSelect('move'),
       onAttack: () => this.toggleSelect('attack'),
@@ -74,6 +77,7 @@ export class DuelController {
         this.clearSelection();
         void this.duel.endTurn();
       },
+      onQuit: () => this.confirmQuit(),
     });
     this.menu = mountOptionMenu(gameRoot);
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
@@ -81,11 +85,23 @@ export class DuelController {
     this.refresh();
   }
 
+  // Quit confirmation: abandons the run and returns to the start menu, which
+  // reopens pre-filled with this run's settings (same path as "New Duel").
+  private confirmQuit(): void {
+    this.confirm.open({
+      title: 'Quit duel?',
+      message: 'Are you sure? This run will be abandoned and you will return to the menu.',
+      confirmLabel: 'Quit',
+      onConfirm: () => this.onNewDuel(),
+    });
+  }
+
   teardown(): void {
     this.unsubscribeDuel();
     this.interaction.setClickHandler(undefined);
     this.interaction.clearMarks();
     this.menu.unmount();
+    this.confirm.unmount();
     this.endScreen?.unmount();
     this.bar.unmount();
   }

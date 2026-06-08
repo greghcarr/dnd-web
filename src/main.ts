@@ -169,9 +169,11 @@ const boot = (): void => {
     // tears down whichever it is when the mode unmounts.
     let teardownActive: () => void = () => {};
 
-    // Pre-duel menu: choose Daily / Free, then begin.
-    function showStart(): void {
-      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, (config) => {
+    // Pre-duel menu: choose Daily / Free, then begin. `initial` pre-fills the
+    // form with a prior run's settings (so quitting/finishing reopens the menu
+    // exactly where that run was configured).
+    function showStart(initial?: RunConfig): void {
+      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, initial, (config) => {
         start.unmount();
         teardownActive = runDuel(config);
       });
@@ -206,7 +208,7 @@ const boot = (): void => {
       const controller = new DuelController(duel, interaction, gameRoot, () => {
         controller.teardown();
         cleanup();
-        showStart();
+        showStart(config);
       });
       // If the enemy won initiative, this runs its turn(s) before the player's.
       void duel.begin();

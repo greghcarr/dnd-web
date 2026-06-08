@@ -36,6 +36,7 @@ export const mountStartScreen = (
   parent: HTMLElement,
   classes: ReadonlyArray<ClassOption>,
   dailyHero: string,
+  initial: RunConfig | undefined,
   onBegin: (config: RunConfig) => void,
 ): StartScreen => {
   const root = document.createElement('div');
@@ -165,6 +166,21 @@ export const mountStartScreen = (
     setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
     onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass, playerName });
   });
+
+  // Reopening after a run (quit / finished): restore the fields to how that
+  // run was configured. For a daily run, re-tick the box (its change handler
+  // re-snaps and locks the fields to today's daily).
+  if (initial) {
+    nameInput.value = initial.playerName ?? '';
+    classSelect.value = initial.playerClass ?? '';
+    levelSelect.value = String(initial.level);
+    seedInput.value = String(initial.seed);
+    manualCheck.checked = initial.manualDice;
+    if (initial.kind === 'daily') {
+      dailyCheck.checked = true;
+      dailyCheck.dispatchEvent(new Event('change'));
+    }
+  }
 
   return {
     unmount() {

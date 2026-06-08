@@ -29,6 +29,7 @@ export interface CommandBarHandlers {
   readonly onSpells: () => void;
   readonly onUndo: () => void;
   readonly onEndTurn: () => void;
+  readonly onQuit: () => void;
 }
 
 export interface CommandBar {
@@ -58,6 +59,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       <button type="button" class="cmd-btn" disabled>Items</button>
       <button type="button" class="cmd-btn cmd-undo" data-cmd="undo">Undo</button>
       <button type="button" class="cmd-btn cmd-end" data-cmd="end">End Turn</button>
+      <button type="button" class="cmd-btn cmd-quit" data-cmd="quit">Quit</button>
     </div>
   `;
   parent.appendChild(bar);
@@ -74,6 +76,7 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const spellsBtn = select<HTMLButtonElement>('[data-cmd="spells"]');
   const undoBtn = select<HTMLButtonElement>('[data-cmd="undo"]');
   const endBtn = select<HTMLButtonElement>('[data-cmd="end"]');
+  const quitBtn = select<HTMLButtonElement>('[data-cmd="quit"]');
   const phaseEl = select('.cmd-phase');
   const moveLeftEl = select('.cmd-move-left');
   const actionPip = select('[data-pip="action"]');
@@ -87,6 +90,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   spellsBtn.addEventListener('click', handlers.onSpells);
   undoBtn.addEventListener('click', handlers.onUndo);
   endBtn.addEventListener('click', handlers.onEndTurn);
+  // Quit is always available (no render() gating), so you can leave mid-turn.
+  quitBtn.addEventListener('click', handlers.onQuit);
 
   return {
     render(view: CommandBarView): void {
