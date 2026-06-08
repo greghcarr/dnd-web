@@ -304,6 +304,14 @@ export class DuelController {
     }
     if (phase !== 'player') this.clearSelection();
     const economy = this.duel.economy();
+    // "Has acted" = moved at all, or spent the action or bonus action. Used to
+    // suggest ending the turn. Null economy (not the player's turn) reads as
+    // not-acted, so the highlight is confined to the player's own turn.
+    const hasActed = economy
+      ? economy.movement.remainingFeet < economy.movement.totalFeet ||
+        !economy.actionAvailable ||
+        !economy.bonusActionAvailable
+      : false;
     const selecting = this.pending?.kind === 'move' || this.pending?.kind === 'attack' ? this.pending.kind : null;
     this.bar.render({
       phase,
@@ -320,6 +328,7 @@ export class DuelController {
         (this.duel.bonusActions().some((option) => option.enabled) || this.bonusSpells().length > 0),
       canSpells: phase === 'player' && this.actionSpells().length > 0,
       canUndo: this.duel.canUndo(),
+      hasActed,
       selecting,
     });
   }

@@ -18,6 +18,9 @@ export interface CommandBarView {
   readonly canBonus: boolean;
   readonly canSpells: boolean;
   readonly canUndo: boolean;
+  // True once the player has taken any action this turn (moved, or spent their
+  // action or bonus action), used to suggest ending the turn.
+  readonly hasActed: boolean;
   readonly selecting: 'move' | 'attack' | null;
 }
 
@@ -107,8 +110,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       spellsBtn.disabled = !view.canSpells;
       undoBtn.disabled = !view.canUndo;
       endBtn.disabled = view.phase !== 'player';
-      // Suggest ending the turn only once no action or bonus action is left.
-      endBtn.classList.toggle('suggested', !view.action && !view.bonus);
+      // Suggest ending the turn once the player has done anything this turn.
+      endBtn.classList.toggle('suggested', view.hasActed);
       moveBtn.classList.toggle('active', view.selecting === 'move');
       attackBtn.classList.toggle('active', view.selecting === 'attack');
     },
