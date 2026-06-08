@@ -581,7 +581,7 @@ body {
   display: none;
 }
 .turn-banner.turn-self {
-  color: #57e06a;
+  color: #f2f4f8;
 }
 .turn-banner.turn-ally {
   color: var(--team-a);
