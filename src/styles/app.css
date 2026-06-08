@@ -647,8 +647,10 @@ body {
   font-size: 0.82rem;
   color: var(--text-dim);
 }
-.start-select {
+.start-select,
+.start-name-input {
   flex: 1 1 auto;
+  min-width: 0;
   padding: 0.4rem 0.5rem;
   color: var(--text);
   background: #20242e;

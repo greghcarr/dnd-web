@@ -73,6 +73,7 @@ export class DuelSession {
       level: config.level,
       movement: 'tactical',
       playerClass: config.playerClass,
+      playerName: config.playerName,
     });
     // Branch the live campaign at the set-up frame: all spawns, placement,
     // and initiative, before any combat action. A fresh scrub cache, since

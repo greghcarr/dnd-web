@@ -16,4 +16,8 @@ export interface RunConfig {
   // The player's chosen class id; undefined leaves it seed-random. The
   // opponent's class stays random regardless.
   readonly playerClass?: string;
+  // The player's display name, shown above their token (and in the battle
+  // log). Undefined keeps the engine's generated name. Cosmetic only: it
+  // does not affect the battle, so it never perturbs the daily's determinism.
+  readonly playerName?: string;
 }

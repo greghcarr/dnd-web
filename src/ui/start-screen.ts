@@ -43,6 +43,7 @@ export const mountStartScreen = (
   root.innerHTML = `
     <div class="start-card">
       <h1 class="start-title">Tactical Duel</h1>
+      <label class="start-field">Name <input type="text" class="start-name-input" maxlength="20" placeholder="Aria" /></label>
       <label class="start-field">Class <select class="start-select start-class-select"></select></label>
       <label class="start-field">Level <select class="start-select start-level-select"></select></label>
       <div class="start-seed">
@@ -67,6 +68,7 @@ export const mountStartScreen = (
     if (!el) throw new Error(`start-screen: missing ${sel}`);
     return el;
   };
+  const nameInput = select<HTMLInputElement>('.start-name-input');
   const classSelect = select<HTMLSelectElement>('.start-class-select');
   const levelSelect = select<HTMLSelectElement>('.start-level-select');
   const seedInput = select<HTMLInputElement>('.start-seed-input');
@@ -147,10 +149,13 @@ export const mountStartScreen = (
   });
 
   select('[data-start="begin"]').addEventListener('click', () => {
+    // The name is cosmetic, so it applies to the daily too (it never changes
+    // the battle); the daily stays the same run for everyone regardless.
+    const playerName = nameInput.value.trim() || undefined;
     if (dailyCheck.checked) {
       // The official daily: built from the daily source (not the locked
       // fields), app-rolled, marked 'daily' so it counts for completion.
-      onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false, level: DAILY_LEVEL, playerClass: dailyClass() });
+      onBegin({ kind: 'daily', seed: dailySeed(), manualDice: false, level: DAILY_LEVEL, playerClass: dailyClass(), playerName });
       return;
     }
     const parsed = Number.parseInt(seedInput.value, 10);
@@ -158,7 +163,7 @@ export const mountStartScreen = (
     const level = Number.parseInt(levelSelect.value, 10) || DEFAULT_LEVEL;
     const playerClass = classSelect.value || undefined;
     setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
-    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass });
+    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass, playerName });
   });
 
   return {
