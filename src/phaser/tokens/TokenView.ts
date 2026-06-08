@@ -75,7 +75,7 @@ const BADGE_PILL_RADIUS_FRAC = 0.35;
 // Nudge the label off its bounding box so the glyphs sit centered in the pill
 // (the text box carries descent space below and side bearing on the left).
 const BADGE_TEXT_OFFSET_X = 1;
-const BADGE_TEXT_OFFSET_Y = 1;
+const BADGE_TEXT_OFFSET_Y = 0;
 const BADGE_PAD_X = 2;
 const BADGE_PAD_Y = 1;
 const BADGE_GAP_PX = 5;
