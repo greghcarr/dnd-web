@@ -46,7 +46,12 @@ export const DEFAULT_SEED = 42;
 export const TACTICAL_DEFAULT_SEED = 123;
 export const DEFAULT_LEVEL = 1;
 export const LEVEL_MIN = 1;
-export const LEVEL_MAX = 5;
+// The engine builds correct level/HP/proficiency/spell slots for all of
+// 1-20. Characters above ~L6 are correctly leveled but under-featured
+// (higher-level feature content is still being modeled in the pack); the
+// engine's runBattle throws loudly if a future choice can't be auto-resolved
+// rather than silently shipping an under-leveled character.
+export const LEVEL_MAX = 20;
 // The daily challenge is always this level (a fixed, shared higher-level duel).
 export const DAILY_LEVEL = 5;
 
