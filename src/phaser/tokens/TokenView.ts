@@ -95,6 +95,16 @@ const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
 const TILE_LOWER_HALF_CENTER_FRAC = 0.75;
 const RING_Y = (TILE_LOWER_HALF_CENTER_FRAC - TILE_GROUND_FRAC) * GRID_TILE_PX;
 
+// Floating "combat text": yellow notifications that rise above the head when
+// something happens to the combatant, then fade. Multiple stack upward so they
+// never sit directly on top of each other.
+const FLOAT_TEXT_COLOR = '#ffe44a';
+const FLOAT_TEXT_FONT_PX = '11px';
+const FLOAT_BASE_Y = NAME_Y - 18; // just above the name
+const FLOAT_LINE_HEIGHT = 14; // vertical gap between stacked notifications
+const FLOAT_LIFETIME_MS = 5000;
+const FLOAT_FADE_MS = 700;
+
 export class TokenView {
   private readonly scene: Phaser.Scene;
   private readonly container: Phaser.GameObjects.Container;
@@ -108,6 +118,9 @@ export class TokenView {
   // square, so the pill is drawn separately).
   private readonly badgePill?: Phaser.GameObjects.Graphics;
   private readonly badgeColor?: number;
+  // Active floating notifications, newest first (index 0 sits just above the
+  // head; older ones stack above it).
+  private readonly floatingTexts: Phaser.GameObjects.Text[] = [];
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -286,6 +299,51 @@ export class TokenView {
     this.badge.setPosition(bx + BADGE_TEXT_OFFSET_X, by + BADGE_TEXT_OFFSET_Y);
   }
 
+  // Pop a yellow notification above the head describing something that just
+  // happened to this combatant. New ones sit just above the head and push the
+  // others up so they stack rather than overlap; each fades out after a few
+  // seconds and the stack reflows as they go.
+  addFloatingText(label: string): void {
+    if (this.destroyed) return;
+    const text = this.scene.add
+      .text(0, FLOAT_BASE_Y, label, {
+        fontFamily: 'monospace',
+        fontSize: FLOAT_TEXT_FONT_PX,
+        color: FLOAT_TEXT_COLOR,
+        stroke: '#000000',
+        strokeThickness: 3,
+        resolution: LABEL_RESOLUTION,
+        align: 'center',
+      })
+      .setOrigin(0.5, 1);
+    text.texture.setFilter(LABEL_FILTER);
+    this.container.add(text);
+    this.floatingTexts.unshift(text);
+    this.reflowFloatingTexts();
+    this.scene.tweens.add({
+      targets: text,
+      alpha: 0,
+      delay: FLOAT_LIFETIME_MS - FLOAT_FADE_MS,
+      duration: FLOAT_FADE_MS,
+      onComplete: () => this.removeFloatingText(text),
+    });
+  }
+
+  // Stack the active notifications upward from just above the head.
+  private reflowFloatingTexts(): void {
+    this.floatingTexts.forEach((text, i) => {
+      text.y = FLOAT_BASE_Y - i * FLOAT_LINE_HEIGHT;
+    });
+  }
+
+  private removeFloatingText(text: Phaser.GameObjects.Text): void {
+    const index = this.floatingTexts.indexOf(text);
+    if (index < 0) return;
+    this.floatingTexts.splice(index, 1);
+    text.destroy();
+    this.reflowFloatingTexts();
+  }
+
   // Declarative: reflect the engine state at the cursor.
   setState(character: Character | undefined, isActive: boolean): void {
     if (!character) {
@@ -431,7 +489,7 @@ export class TokenView {
   destroy(): void {
     this.destroyed = true;
     this.cancelBlink();
-    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container]);
+    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container, ...this.floatingTexts]);
     this.container.destroy();
   }
 }

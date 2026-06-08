@@ -8,6 +8,7 @@ import { TokenView, type TokenBadge } from '@/phaser/tokens/TokenView';
 import { registerCharacterAnims } from '@/phaser/anims';
 import { frameBounds } from '@/phaser/camera';
 import { fitGameToParent } from '@/phaser/render-scale';
+import { floatingEventEntries } from '@/phaser/floating-events';
 import {
   spriteKeyFor,
   GROUND_KEY,
@@ -523,6 +524,10 @@ export class ArenaScene extends Phaser.Scene {
       this.faceTokenToward(event.characterId, event.targetIds[0]);
     } else if (event.type === 'DamageApplied') {
       this.tokens.get(event.targetId)?.flashHit();
+    }
+    // Pop floating "combat text" above the affected combatant(s) for the event.
+    for (const entry of floatingEventEntries(event, snapshot.session.content)) {
+      this.tokens.get(entry.subjectId)?.addFloatingText(entry.label);
     }
   }
 
