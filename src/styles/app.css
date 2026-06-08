@@ -555,6 +555,51 @@ body {
   color: var(--text-dim);
 }
 
+/* Interactive duel: large banner a quarter of the way down the arena
+   announcing whose turn it is. Player-centric (hidden in the replay viewers).
+   Never captures taps, so it doesn't block the arena beneath it. Colours map
+   to the relation: green = you, blue = ally (team A), red = enemy (team B). */
+.turn-banner {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(2rem, 7vw, 4.5rem);
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.85),
+    0 0 3px rgba(0, 0, 0, 0.9);
+  animation: turn-banner-in 260ms ease-out;
+}
+.turn-banner[hidden] {
+  display: none;
+}
+.turn-banner.turn-self {
+  color: #57e06a;
+}
+.turn-banner.turn-ally {
+  color: var(--team-a);
+}
+.turn-banner.turn-enemy {
+  color: var(--team-b);
+}
+@keyframes turn-banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 /* Command-bar sub-menu (Actions now; Spells / Bonus later): a popup card
    above the bar, with a transparent backdrop that closes it on outside tap. */
 #option-menu {

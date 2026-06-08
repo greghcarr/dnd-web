@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { computeSpellSlots, type Character, type LocationMap } from 'dnd-srd-engine';
 import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
+import type { FuzzBattleResult } from '@engine-fuzz';
 import type { FormationBounds, Team } from '@/spatial/formation';
 import { combatantPositions, cellOf } from '@/spatial/engine-positions';
 import { TokenView, type TokenBadge } from '@/phaser/tokens/TokenView';
@@ -122,6 +123,11 @@ export class ArenaScene extends Phaser.Scene {
   // currently showing, so a state change can refresh the open card.
   private tooltip?: HTMLElement;
   private tooltipId?: string;
+  // Interactive-duel turn banner: large DOM text near the top announcing whose
+  // turn it is. `turnBannerActiveId` is the combatant it currently names, so the
+  // banner only re-renders (and re-animates) when the active combatant changes.
+  private turnBanner?: HTMLElement;
+  private turnBannerActiveId?: string;
 
   constructor() {
     super('Arena');
@@ -132,6 +138,7 @@ export class ArenaScene extends Phaser.Scene {
     registerCharacterAnims(this);
     this.store = this.registry.get('store') as SnapshotSource;
     this.createTooltip();
+    this.createTurnBanner();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
     // Size the device-resolution buffer to the parent now (covers the initial
     // layout before the first window/observer event).
@@ -175,6 +182,7 @@ export class ArenaScene extends Phaser.Scene {
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
       this.tooltip?.remove();
+      this.turnBanner?.remove();
     });
     this.unsubscribe = this.store.subscribe((snapshot) => this.onSnapshot(snapshot));
   }
@@ -184,10 +192,12 @@ export class ArenaScene extends Phaser.Scene {
     if (snapshot.session !== this.currentSession) {
       this.currentSession = snapshot.session;
       this.clearTooltip(); // the previously hovered token is gone
+      this.turnBannerActiveId = undefined; // force a fresh banner for the new battle
       this.buildForSession(snapshot.session);
       this.prevCursor = snapshot.cursor;
       this.setStates(snapshot, false);
       this.frameCamera(false);
+      this.updateTurnBanner(snapshot);
       return;
     }
     const delta = snapshot.cursor - this.prevCursor;
@@ -199,6 +209,7 @@ export class ArenaScene extends Phaser.Scene {
     if (animate) this.reactToEvent(snapshot);
     this.frameCamera(animate);
     this.refreshTooltip(); // keep an open tooltip's HP/slots current
+    this.updateTurnBanner(snapshot);
   }
 
   private buildForSession(session: Session): void {
@@ -475,10 +486,16 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  // The combatant whose turn it is at the current cursor, or undefined before
+  // the encounter has an active combatant.
+  private activeCombatantId(snapshot: ReplaySnapshot): string | undefined {
+    const encounter = snapshot.campaign.state.encounters[snapshot.session.encounterId];
+    return encounter?.combatants[encounter.activeIndex]?.combatantId;
+  }
+
   private setStates(snapshot: ReplaySnapshot, animateMoves: boolean): void {
     const { campaign, session } = snapshot;
-    const encounter = campaign.state.encounters[session.encounterId];
-    const activeId = encounter?.combatants[encounter.activeIndex]?.combatantId;
+    const activeId = this.activeCombatantId(snapshot);
     for (const [id, token] of this.tokens) {
       token.setState(campaign.state.characters[id], id === activeId);
     }
@@ -550,6 +567,55 @@ export class ArenaScene extends Phaser.Scene {
     el.hidden = true;
     parent.appendChild(el);
     this.tooltip = el;
+  }
+
+  // --- Turn banner (interactive duel): large text near the top naming whose
+  // turn it is, coloured by their relation to the player ---
+
+  private createTurnBanner(): void {
+    const parent = this.game.canvas.parentElement ?? document.body;
+    const el = document.createElement('div');
+    el.className = 'turn-banner';
+    el.hidden = true;
+    parent.appendChild(el);
+    this.turnBanner = el;
+  }
+
+  // Announce whose turn it is: "Your turn" (green), "(Ally) Name's turn" (blue),
+  // or "(Enemy) Name's turn" (red). Player-centric, so it stays hidden in the
+  // replay viewers (no playerId). Only re-renders when the active combatant
+  // changes, so it doesn't flicker across the several snapshots of one turn.
+  private updateTurnBanner(snapshot: ReplaySnapshot): void {
+    const banner = this.turnBanner;
+    if (!banner) return;
+    const { session } = snapshot;
+    if (session.playerId === undefined) {
+      banner.hidden = true;
+      this.turnBannerActiveId = undefined;
+      return;
+    }
+    const activeId = this.activeCombatantId(snapshot);
+    if (activeId === this.turnBannerActiveId) return;
+    this.turnBannerActiveId = activeId;
+    if (activeId === undefined) {
+      banner.hidden = true;
+      return;
+    }
+    const relation = turnRelation(session.result, session.playerId, activeId);
+    const name = snapshot.campaign.state.characters[activeId]?.name ?? activeId;
+    banner.textContent = TURN_BANNER_LABELS[relation](name);
+    banner.className = `turn-banner turn-${relation}`;
+    banner.hidden = false;
+    this.restartBannerAnimation(banner);
+  }
+
+  // Replay the CSS entrance animation on each turn change (it otherwise only
+  // runs once, when the element is first added). The reflow read forces the
+  // browser to apply the cleared animation before it's restored.
+  private restartBannerAnimation(banner: HTMLElement): void {
+    banner.style.animation = 'none';
+    void banner.offsetWidth;
+    banner.style.animation = '';
   }
 
   private showTooltip(id: string, pointer: Phaser.Input.Pointer): void {
@@ -780,6 +846,29 @@ const expandBounds = (
 const badgeFor = (id: string, playerId: string | undefined): TokenBadge | undefined => {
   if (playerId === undefined) return undefined;
   return id === playerId ? 'player' : 'cpu';
+};
+
+// Whose turn it is relative to the player: their own, an ally's, or an enemy's.
+// The player's team is whichever result roster contains them, so allies are the
+// rest of that roster and everyone else is an enemy.
+type TurnRelation = 'self' | 'ally' | 'enemy';
+const turnRelation = (
+  result: FuzzBattleResult,
+  playerId: string,
+  activeId: string,
+): TurnRelation => {
+  if (activeId === playerId) return 'self';
+  const playerOnTeamA = result.teamACharacterIds.includes(playerId);
+  const allies = playerOnTeamA ? result.teamACharacterIds : result.teamBCharacterIds;
+  return allies.includes(activeId) ? 'ally' : 'enemy';
+};
+
+// The turn banner's wording per relation (the active combatant's name fills the
+// ally/enemy forms).
+const TURN_BANNER_LABELS: Readonly<Record<TurnRelation, (name: string) => string>> = {
+  self: () => 'Your turn',
+  ally: (name) => `(Ally) ${name}'s turn`,
+  enemy: (name) => `(Enemy) ${name}'s turn`,
 };
 
 // A combatant's most-advanced class (the colour-defining one for multiclass).
