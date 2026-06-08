@@ -36,7 +36,17 @@ const conditionName = (content: ResolvedContent, id: string): string =>
 const spellNameOf = (content: ResolvedContent, id: string): string =>
   content.spells.get(id)?.name ?? humanize(id);
 
+// Info popups read as proper sentences, so every label ends with a period.
+// The per-event labels below are written without a trailing period (including
+// "moved 20 ft", not "ft.") and this adds the single terminating one.
 export const floatingEventEntries = (
+  event: Event,
+  state: CampaignState,
+  content: ResolvedContent,
+): FloatingEntry[] =>
+  entriesForEvent(event, state, content).map((entry) => ({ ...entry, label: `${entry.label}.` }));
+
+const entriesForEvent = (
   event: Event,
   state: CampaignState,
   content: ResolvedContent,
@@ -98,7 +108,7 @@ export const floatingEventEntries = (
         { subjectId: event.targetId, label: `${nameOf(state, event.targetId)} is no longer ${conditionName(content, event.conditionId)}` },
       ];
     case 'CombatantMoved':
-      return [{ subjectId: event.combatantId, label: `${nameOf(state, event.combatantId)} moved ${Math.round(event.feetTraveled)} ft.` }];
+      return [{ subjectId: event.combatantId, label: `${nameOf(state, event.combatantId)} moved ${Math.round(event.feetTraveled)} ft` }];
     case 'Dashed':
       return [{ subjectId: event.combatantId, label: `${nameOf(state, event.combatantId)} dashed` }];
     case 'Disengaged':
