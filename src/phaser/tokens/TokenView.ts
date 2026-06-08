@@ -41,6 +41,7 @@ import {
   BADGE_TEXT_COLOR,
   cssHex,
 } from '@/constants/colors';
+import type { FloatingSegment } from '@/phaser/floating-events';
 
 const SPRITE_SCALE = 1.4;
 // pixelArt mode renders every texture at this many device pixels per CSS
@@ -110,6 +111,10 @@ const FLOAT_TEXT_COLORS: Record<FloatingTextKind, string> = {
 // label at once.
 const FLOAT_TEXT_FONT_FAMILY = 'monospace';
 const FLOAT_TEXT_FONT_PX = '11px';
+// Black outline behind the floating text for legibility. Phaser pads each Text's
+// reported width by the stroke thickness (and draws the glyphs inset by half of
+// it), so the per-segment layout subtracts it to keep coloured runs flush.
+const FLOAT_STROKE_THICKNESS = 3;
 const FLOAT_BASE_Y = NAME_Y - 18; // just above the name
 const FLOAT_LINE_HEIGHT = 14; // vertical gap between stacked notifications
 const FLOAT_LIFETIME_MS = 5000;
@@ -129,8 +134,9 @@ export class TokenView {
   private readonly badgePill?: Phaser.GameObjects.Graphics;
   private readonly badgeColor?: number;
   // Active floating notifications, newest first (index 0 sits just above the
-  // head; older ones stack above it).
-  private readonly floatingTexts: Phaser.GameObjects.Text[] = [];
+  // head; older ones stack above it). Each is a container of one Text per
+  // segment, laid out in a row so names can carry their own class colour.
+  private readonly floatingLines: Phaser.GameObjects.Container[] = [];
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -310,47 +316,63 @@ export class TokenView {
   }
 
   // Pop a notification above the head describing something that just happened to
-  // (or was attempted by) this combatant. 'info' reads yellow, 'error' red. New
-  // ones sit just above the head and push the others up so they stack rather
-  // than overlap; each fades out after a few seconds and the stack reflows.
-  addFloatingText(label: string, kind: FloatingTextKind = 'info'): void {
-    if (this.destroyed) return;
-    const text = this.scene.add
-      .text(0, FLOAT_BASE_Y, label, {
-        fontFamily: FLOAT_TEXT_FONT_FAMILY,
-        fontSize: FLOAT_TEXT_FONT_PX,
-        color: FLOAT_TEXT_COLORS[kind],
-        stroke: '#000000',
-        strokeThickness: 3,
-        resolution: LABEL_RESOLUTION,
-        align: 'center',
-      })
-      .setOrigin(0.5, 1);
-    text.texture.setFilter(LABEL_FILTER);
-    this.container.add(text);
-    this.floatingTexts.unshift(text);
+  // (or was attempted by) this combatant. Each segment renders in its own colour
+  // (names in their class colour); segments with no colour use the line's info
+  // (yellow) or error (red) colour. New ones sit just above the head and push
+  // the others up so they stack rather than overlap; each fades out after a few
+  // seconds and the stack reflows.
+  addFloatingText(segments: ReadonlyArray<FloatingSegment>, kind: FloatingTextKind = 'info'): void {
+    if (this.destroyed || segments.length === 0) return;
+    const defaultColor = FLOAT_TEXT_COLORS[kind];
+    // Per-segment glyph advance = reported width minus the stroke padding Phaser
+    // adds, so adjacent runs sit flush rather than a stroke-width apart.
+    const parts = segments.map((segment) => {
+      const part = this.scene.add
+        .text(0, 0, segment.text, {
+          fontFamily: FLOAT_TEXT_FONT_FAMILY,
+          fontSize: FLOAT_TEXT_FONT_PX,
+          color: segment.color === undefined ? defaultColor : cssHex(segment.color),
+          stroke: '#000000',
+          strokeThickness: FLOAT_STROKE_THICKNESS,
+          resolution: LABEL_RESOLUTION,
+        })
+        .setOrigin(0, 1);
+      part.texture.setFilter(LABEL_FILTER);
+      return { text: part, advance: part.width - FLOAT_STROKE_THICKNESS };
+    });
+    // Centre the glyph run over the head: each Text's left edge is inset half a
+    // stroke from where its glyphs start, so back that out as we step along.
+    const glyphTotal = parts.reduce((sum, p) => sum + p.advance, 0);
+    let cursor = -glyphTotal / 2;
+    for (const { text, advance } of parts) {
+      text.x = cursor - FLOAT_STROKE_THICKNESS / 2;
+      cursor += advance;
+    }
+    const line = this.scene.add.container(0, FLOAT_BASE_Y, parts.map((p) => p.text));
+    this.container.add(line);
+    this.floatingLines.unshift(line);
     this.reflowFloatingTexts();
     this.scene.tweens.add({
-      targets: text,
+      targets: line,
       alpha: 0,
       delay: FLOAT_LIFETIME_MS - FLOAT_FADE_MS,
       duration: FLOAT_FADE_MS,
-      onComplete: () => this.removeFloatingText(text),
+      onComplete: () => this.removeFloatingText(line),
     });
   }
 
   // Stack the active notifications upward from just above the head.
   private reflowFloatingTexts(): void {
-    this.floatingTexts.forEach((text, i) => {
-      text.y = FLOAT_BASE_Y - i * FLOAT_LINE_HEIGHT;
+    this.floatingLines.forEach((line, i) => {
+      line.y = FLOAT_BASE_Y - i * FLOAT_LINE_HEIGHT;
     });
   }
 
-  private removeFloatingText(text: Phaser.GameObjects.Text): void {
-    const index = this.floatingTexts.indexOf(text);
+  private removeFloatingText(line: Phaser.GameObjects.Container): void {
+    const index = this.floatingLines.indexOf(line);
     if (index < 0) return;
-    this.floatingTexts.splice(index, 1);
-    text.destroy();
+    this.floatingLines.splice(index, 1);
+    line.destroy();
     this.reflowFloatingTexts();
   }
 
@@ -499,7 +521,7 @@ export class TokenView {
   destroy(): void {
     this.destroyed = true;
     this.cancelBlink();
-    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container, ...this.floatingTexts]);
+    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container, ...this.floatingLines]);
     this.container.destroy();
   }
 }

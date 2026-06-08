@@ -31,9 +31,11 @@ import {
   GROUND_BASE_COLOR,
   GRID_LINE_COLOR,
   GRID_LINE_ALPHA,
+  CLASS_COLORS,
   CLASS_NAME_OUTLINE_COLORS,
   TEAM_A_COLOR,
   TEAM_B_COLOR,
+  cssHex,
 } from '@/constants/colors';
 import { makeRng, type Rng } from '@/phaser/rng';
 import type { ArenaInteraction } from '@/phaser/interaction';
@@ -174,7 +176,7 @@ export class ArenaScene extends Phaser.Scene {
       // Floating notices the controller pushes (e.g. a refused spell cast) pop
       // above the named combatant, red for errors.
       this.noticeUnsub = this.interaction.onNotice((notice) => {
-        this.tokens.get(notice.subjectId)?.addFloatingText(notice.label, notice.tone);
+        this.tokens.get(notice.subjectId)?.addFloatingText([{ text: notice.label }], notice.tone);
       });
       this.drawOverlay();
     }
@@ -551,7 +553,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     // Pop floating "combat text" above the affected combatant(s) for the event.
     for (const entry of floatingEventEntries(event, snapshot.campaign.state, snapshot.session.content)) {
-      this.tokens.get(entry.subjectId)?.addFloatingText(entry.label);
+      this.tokens.get(entry.subjectId)?.addFloatingText(entry.segments);
     }
   }
 
@@ -609,9 +611,16 @@ export class ArenaScene extends Phaser.Scene {
       return;
     }
     const relation = turnRelation(session.result, session.playerId, activeId);
-    const name = snapshot.campaign.state.characters[activeId]?.name ?? activeId;
-    banner.textContent = TURN_BANNER_LABELS[relation](name);
+    const character = snapshot.campaign.state.characters[activeId];
+    const name = character?.name ?? activeId;
+    // Tint the name in its class colour; the rest keeps the relation colour.
+    const classColor = character && character.classes.length > 0 ? CLASS_COLORS[primaryClassId(character)] : undefined;
+    const { before, after } = TURN_BANNER_LABELS[relation];
+    const nameEl = document.createElement('span');
+    nameEl.textContent = name;
+    if (classColor !== undefined) nameEl.style.color = cssHex(classColor);
     banner.className = `turn-banner turn-${relation}`;
+    banner.replaceChildren(document.createTextNode(before), nameEl, document.createTextNode(after));
     banner.hidden = false;
     this.restartBannerAnimation(banner);
   }
@@ -872,10 +881,13 @@ const turnRelation = (
 
 // The turn banner's wording per relation (the active combatant's name fills the
 // ally/enemy forms).
-const TURN_BANNER_LABELS: Readonly<Record<TurnRelation, (name: string) => string>> = {
-  self: (name) => `Your (${name}'s) turn`,
-  ally: (name) => `(Ally) ${name}'s turn`,
-  enemy: (name) => `(Enemy) ${name}'s turn`,
+// The turn banner's wording per relation, split around the combatant's name so
+// the name can be tinted in its class colour while the rest keeps the relation
+// colour.
+const TURN_BANNER_LABELS: Readonly<Record<TurnRelation, { readonly before: string; readonly after: string }>> = {
+  self: { before: 'Your (', after: "'s) turn" },
+  ally: { before: '(Ally) ', after: "'s turn" },
+  enemy: { before: '(Enemy) ', after: "'s turn" },
 };
 
 // A combatant's most-advanced class (the colour-defining one for multiclass).
