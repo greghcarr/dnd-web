@@ -568,7 +568,7 @@ body {
   pointer-events: none;
   font-family: var(--sans);
   font-weight: 800;
-  font-size: clamp(1.6rem, 5.5vw, 3.6rem);
+  font-size: clamp(0.8rem, 2.75vw, 1.8rem);
   letter-spacing: 0.01em;
   text-align: center;
   white-space: nowrap;
