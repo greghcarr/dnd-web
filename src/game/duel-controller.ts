@@ -23,6 +23,10 @@ const SIMPLE_ACTION_LABELS: Record<SimpleAction, string> = {
 // this prefix tags them so a pick routes to the spell flow, not useOption.
 const SPELL_OPTION_PREFIX = 'spell:';
 
+// Attack is the first entry in the Actions menu (distinct from the
+// self-targeted SimpleActions, since picking it starts target selection).
+const ATTACK_ACTION_ID = 'attack';
+
 // What the player is currently aiming. Move/attack target via the command-bar
 // buttons; a spell that needs a target parks here while the player taps a cell.
 type Pending =
@@ -53,7 +57,6 @@ export class DuelController {
     this.confirm = mountConfirmDialog(gameRoot);
     this.bar = mountCommandBar(gameRoot, {
       onMove: () => this.toggleSelect('move'),
-      onAttack: () => this.toggleSelect('attack'),
       onActions: () => this.openActions(),
       onBonus: () => this.openBonus(),
       onSpells: () => this.openSpells(),
@@ -109,11 +112,18 @@ export class DuelController {
   private openActions(): void {
     if (this.duel.phase() !== 'player') return;
     this.clearSelection();
-    this.menu.show('Actions', this.actionOptions(), (id) => void this.duel.commitAction(id as SimpleAction));
+    this.menu.show('Actions', this.actionOptions(), (id) => {
+      // Attack starts target selection; the rest are self-targeted commits.
+      if (id === ATTACK_ACTION_ID) {
+        this.toggleSelect('attack');
+        return;
+      }
+      void this.duel.commitAction(id as SimpleAction);
+    });
   }
 
   private actionOptions(): MenuOption[] {
-    const out: MenuOption[] = [];
+    const out: MenuOption[] = [this.attackOption()];
     for (const available of this.duel.availableActions()) {
       if (available.action !== 'dash' && available.action !== 'disengage' && available.action !== 'dodge') continue;
       out.push({
@@ -124,6 +134,15 @@ export class DuelController {
       });
     }
     return out;
+  }
+
+  // Attack as an Actions entry: usable when the action is unspent and a target
+  // is in range; picking it starts the target-selection flow (see openActions).
+  private attackOption(): MenuOption {
+    const actionAvailable = this.duel.economy()?.actionAvailable ?? false;
+    const hasTarget = this.duel.attackTargets().length > 0;
+    const reason = !actionAvailable ? 'no action' : !hasTarget ? 'no target in range' : undefined;
+    return { id: ATTACK_ACTION_ID, label: 'Attack', enabled: actionAvailable && hasTarget, hint: reason };
   }
 
   // --- Spells menu (action-cost spells) ---
@@ -311,7 +330,7 @@ export class DuelController {
         !economy.actionAvailable ||
         !economy.bonusActionAvailable
       : false;
-    const selecting = this.pending?.kind === 'move' || this.pending?.kind === 'attack' ? this.pending.kind : null;
+    const selecting = this.pending?.kind === 'move' ? 'move' : null;
     // The turn resources read together with the turn banner at the top, shown
     // through the player's turn (including the brief busy state mid-commit).
     this.economyBar.render({
@@ -324,7 +343,6 @@ export class DuelController {
     this.bar.render({
       phase,
       canMove: phase === 'player' && this.duel.moveDestinations().length > 0,
-      canAttack: phase === 'player' && this.duel.attackTargets().length > 0 && (economy?.actionAvailable ?? false),
       canActions: phase === 'player' && this.actionOptions().some((option) => option.enabled),
       canBonus:
         phase === 'player' &&

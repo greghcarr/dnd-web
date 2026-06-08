@@ -2,13 +2,12 @@ import type { DuelPhase } from '@/game/duel-session';
 
 // The bottom-of-screen command bar for the interactive duel. Touch-first:
 // large tap targets, overlays the arena, and the row wraps on narrow phones.
-// Move / Attack are live; Actions / Bonus / Spells / Items are greyed
-// scaffolds for the fuller action menu. The controller drives it via render().
+// Move is live; Actions holds Attack plus Dash / Disengage / Dodge; Bonus /
+// Spells / Items are greyed scaffolds. The controller drives it via render().
 
 export interface CommandBarView {
   readonly phase: DuelPhase;
   readonly canMove: boolean;
-  readonly canAttack: boolean;
   readonly canActions: boolean;
   readonly canBonus: boolean;
   readonly canSpells: boolean;
@@ -16,12 +15,11 @@ export interface CommandBarView {
   // True once the player has taken any action this turn (moved, or spent their
   // action or bonus action), used to suggest ending the turn.
   readonly hasActed: boolean;
-  readonly selecting: 'move' | 'attack' | null;
+  readonly selecting: 'move' | null;
 }
 
 export interface CommandBarHandlers {
   readonly onMove: () => void;
-  readonly onAttack: () => void;
   readonly onActions: () => void;
   readonly onBonus: () => void;
   readonly onSpells: () => void;
@@ -41,7 +39,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   bar.innerHTML = `
     <div class="cmd-buttons">
       <button type="button" class="cmd-btn" data-cmd="move">Move</button>
-      <button type="button" class="cmd-btn" data-cmd="attack">Attack</button>
       <button type="button" class="cmd-btn" data-cmd="actions">Actions</button>
       <button type="button" class="cmd-btn" data-cmd="bonus">Bonus</button>
       <button type="button" class="cmd-btn" data-cmd="spells">Spells</button>
@@ -59,7 +56,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
     return el;
   };
   const moveBtn = select<HTMLButtonElement>('[data-cmd="move"]');
-  const attackBtn = select<HTMLButtonElement>('[data-cmd="attack"]');
   const actionsBtn = select<HTMLButtonElement>('[data-cmd="actions"]');
   const bonusBtn = select<HTMLButtonElement>('[data-cmd="bonus"]');
   const spellsBtn = select<HTMLButtonElement>('[data-cmd="spells"]');
@@ -68,7 +64,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   const quitBtn = select<HTMLButtonElement>('[data-cmd="quit"]');
 
   moveBtn.addEventListener('click', handlers.onMove);
-  attackBtn.addEventListener('click', handlers.onAttack);
   actionsBtn.addEventListener('click', handlers.onActions);
   bonusBtn.addEventListener('click', handlers.onBonus);
   spellsBtn.addEventListener('click', handlers.onSpells);
@@ -80,7 +75,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
   return {
     render(view: CommandBarView): void {
       moveBtn.disabled = !view.canMove;
-      attackBtn.disabled = !view.canAttack;
       actionsBtn.disabled = !view.canActions;
       bonusBtn.disabled = !view.canBonus;
       spellsBtn.disabled = !view.canSpells;
@@ -89,7 +83,6 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       // Suggest ending the turn once the player has done anything this turn.
       endBtn.classList.toggle('suggested', view.hasActed);
       moveBtn.classList.toggle('active', view.selecting === 'move');
-      attackBtn.classList.toggle('active', view.selecting === 'attack');
     },
     unmount(): void {
       bar.remove();
