@@ -525,6 +525,32 @@ body {
   border-color: #e7553c;
 }
 
+/* Tap-to-inspect tooltip with a combatant's stats, placed at the tap point.
+   pointer-events off so it never blocks the taps/clicks under it. */
+.char-tooltip {
+  position: fixed;
+  z-index: 8;
+  pointer-events: none;
+  max-width: 16rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(16, 19, 26, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.char-tooltip[hidden] {
+  display: none;
+}
+.tt-name {
+  font-weight: 700;
+}
+.tt-line {
+  color: var(--text-dim);
+}
+
 /* Command-bar sub-menu (Actions now; Spells / Bonus later): a popup card
    above the bar, with a transparent backdrop that closes it on outside tap. */
 #option-menu {

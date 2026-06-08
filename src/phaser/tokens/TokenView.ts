@@ -328,6 +328,14 @@ export class TokenView {
     if (Math.abs(dx) > 0.5) this.setFacing(dx > 0 ? 'right' : 'left');
   }
 
+  // True if a world-space point falls on the visible character sprite, so the
+  // scene can resolve a tap to this combatant (works in any movement mode,
+  // since it tests the sprite's real bounds rather than a grid cell).
+  hitTest(worldX: number, worldY: number): boolean {
+    if (this.destroyed || !this.container.visible) return false;
+    return this.sprite.getBounds().contains(worldX, worldY);
+  }
+
   // Reflect a position change at the cursor (tactical mode): slide to the
   // new tile on a single forward step, snap on jumps/rewinds. Turns to face
   // the travel direction; depth tracks world Y so y-sort stays correct.

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { Character, LocationMap } from 'dnd-srd-engine';
+import { computeSpellSlots, type Character, type LocationMap } from 'dnd-srd-engine';
 import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import type { FormationBounds, Team } from '@/spatial/formation';
@@ -100,6 +100,11 @@ export class ArenaScene extends Phaser.Scene {
   private interactionUnsub?: () => void;
   private resizeObserver?: ResizeObserver;
   private reframeQueued = false;
+  // Tap-to-inspect tooltip: a DOM card showing a combatant's stats, toggled by
+  // tapping it (next tap anywhere dismisses). `tooltipId` is the combatant it's
+  // currently showing, so a state change can refresh the open card.
+  private tooltip?: HTMLElement;
+  private tooltipId?: string;
 
   constructor() {
     super('Arena');
@@ -109,6 +114,7 @@ export class ArenaScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
     registerCharacterAnims(this);
     this.store = this.registry.get('store') as SnapshotSource;
+    this.createTooltip();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
     // Size the device-resolution buffer to the parent now (covers the initial
     // layout before the first window/observer event).
@@ -134,19 +140,24 @@ export class ArenaScene extends Phaser.Scene {
       this.overlay = this.add.graphics().setDepth(RENDER_DEPTH.OVERLAY);
       // Redraw the overlay and re-fit the camera so revealed cells (e.g. the
       // Move squares) all come into view, snapping back when they clear.
+      // Entering a target selection also dismisses any open inspect tooltip.
       this.interactionUnsub = this.interaction.onChange(() => {
         this.drawOverlay();
         this.frameForMarks(true);
+        if (this.interaction!.getMarks().length > 0) this.clearTooltip();
       });
-      this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.drawOverlay();
     }
+    // Always handle taps: tap a character to toggle its info tooltip; in a
+    // live duel a tap during target selection picks the cell instead.
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       this.interactionUnsub?.();
       this.resizeObserver?.disconnect();
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
+      this.tooltip?.remove();
     });
     this.unsubscribe = this.store.subscribe((snapshot) => this.onSnapshot(snapshot));
   }
@@ -155,6 +166,7 @@ export class ArenaScene extends Phaser.Scene {
     this.lastSnapshot = snapshot;
     if (snapshot.session !== this.currentSession) {
       this.currentSession = snapshot.session;
+      this.clearTooltip(); // the previously hovered token is gone
       this.buildForSession(snapshot.session);
       this.prevCursor = snapshot.cursor;
       this.setStates(snapshot, false);
@@ -169,6 +181,7 @@ export class ArenaScene extends Phaser.Scene {
     this.setStates(snapshot, animate);
     if (animate) this.reactToEvent(snapshot);
     this.frameCamera(animate);
+    this.refreshTooltip(); // keep an open tooltip's HP/slots current
   }
 
   private buildForSession(session: Session): void {
@@ -476,6 +489,86 @@ export class ArenaScene extends Phaser.Scene {
     if (actor && target) actor.faceToward(target.worldX);
   }
 
+  // --- Hover tooltip (desktop): a DOM card following the pointer ---
+
+  private createTooltip(): void {
+    const parent = this.game.canvas.parentElement ?? document.body;
+    const el = document.createElement('div');
+    el.className = 'char-tooltip';
+    el.hidden = true;
+    parent.appendChild(el);
+    this.tooltip = el;
+  }
+
+  private showTooltip(id: string, pointer: Phaser.Input.Pointer): void {
+    this.tooltipId = id;
+    if (this.populateTooltip(id) && this.tooltip) {
+      this.tooltip.hidden = false;
+      this.positionTooltip(pointer);
+    }
+  }
+
+  private clearTooltip(): void {
+    this.tooltipId = undefined;
+    if (this.tooltip) this.tooltip.hidden = true;
+  }
+
+  // Rebuild the open tooltip's contents (e.g. after HP/slots change); hides it
+  // if the shown combatant has gone (a new battle loaded).
+  private refreshTooltip(): void {
+    if (this.tooltipId === undefined) return;
+    if (!this.populateTooltip(this.tooltipId)) this.clearTooltip();
+  }
+
+  // The combatant whose visible token is at a world point (topmost wins), or
+  // undefined if the tap missed every token.
+  private tokenAt(worldX: number, worldY: number): string | undefined {
+    for (const [id, token] of this.tokens) {
+      if (token.hitTest(worldX, worldY)) return id;
+    }
+    return undefined;
+  }
+
+  private positionTooltip(pointer: Phaser.Input.Pointer): void {
+    if (!this.tooltip) return;
+    const event = pointer.event as MouseEvent | undefined;
+    this.tooltip.style.left = `${(event?.clientX ?? 0) + TOOLTIP_OFFSET_PX}px`;
+    this.tooltip.style.top = `${(event?.clientY ?? 0) + TOOLTIP_OFFSET_PX}px`;
+  }
+
+  // Fill the tooltip with the combatant's name, descriptor, HP, and spell
+  // slots remaining, from engine state at the current cursor. textContent (not
+  // innerHTML) keeps the player-entered name injection-safe. Returns false if
+  // the combatant is gone.
+  private populateTooltip(id: string): boolean {
+    const snapshot = this.lastSnapshot;
+    if (!snapshot || !this.tooltip) return false;
+    const character = snapshot.campaign.state.characters[id];
+    if (!character) return false;
+    const content = snapshot.session.content;
+    const totalLevel = character.classes.reduce((sum, c) => sum + c.level, 0);
+    const primary = character.classes.reduce((a, b) => (b.level > a.level ? b : a));
+    const race = content.species.get(character.speciesId)?.name;
+    const subclass = primary.subclassId ? content.subclasses.get(primary.subclassId)?.name : undefined;
+    const className = content.classes.get(primary.classId)?.name ?? primary.classId;
+    const descriptor = [`Level ${totalLevel}`, race, subclass, className].filter(Boolean).join(' ');
+    const hp = `${Math.max(0, character.hp.current)}/${character.hp.max} HP`;
+    const lines = [descriptor, hp, spellSlotsLabel(character, content.classes)];
+
+    this.tooltip.replaceChildren();
+    const nameEl = document.createElement('div');
+    nameEl.className = 'tt-name';
+    nameEl.textContent = character.name;
+    this.tooltip.appendChild(nameEl);
+    for (const line of lines) {
+      const lineEl = document.createElement('div');
+      lineEl.className = 'tt-line';
+      lineEl.textContent = line;
+      this.tooltip.appendChild(lineEl);
+    }
+    return true;
+  }
+
   // Paint the interactive-duel cell overlay: green for reachable move cells,
   // red for legal attack targets. Redrawn whenever the controller changes the
   // marks; empty (cleared) in replay modes and when idle.
@@ -494,15 +587,21 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  // Tap-to-act: convert a pointer (mouse or touch) to a grid cell and report
-  // it to the interaction channel, which the controller maps to a move
-  // destination or attack target.
+  // A tap (mouse or touch): during a live-duel target selection it picks the
+  // move/attack/spell cell; otherwise it toggles the inspect tooltip (any tap
+  // closes an open one; a tap on a character opens that character's).
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
-    if (!this.interaction) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    const col = Math.floor(world.x / GRID_TILE_PX);
-    const row = Math.floor(world.y / GRID_TILE_PX);
-    this.interaction.clickCell(col, row);
+    if (this.interaction && this.interaction.getMarks().length > 0) {
+      this.interaction.clickCell(Math.floor(world.x / GRID_TILE_PX), Math.floor(world.y / GRID_TILE_PX));
+      return;
+    }
+    if (this.tooltipId !== undefined) {
+      this.clearTooltip();
+      return;
+    }
+    const id = this.tokenAt(world.x, world.y);
+    if (id !== undefined) this.showTooltip(id, pointer);
   }
 
   // Reframe on the next animation frame, coalescing bursts of resize events.
@@ -578,6 +677,30 @@ export class ArenaScene extends Phaser.Scene {
     if (bounds) frameBounds(this.cameras.main, bounds, animate);
   }
 }
+
+// Pointer-to-tooltip gap so the card doesn't sit under the cursor.
+const TOOLTIP_OFFSET_PX = 14;
+
+// "Spell slots remaining" line: per-level remaining/max from the engine's slot
+// progression (computeSpellSlots) minus the character's used slots, plus any
+// pact slots. "none" for non-casters.
+const spellSlotsLabel = (
+  character: Character,
+  classesById: Parameters<typeof computeSpellSlots>[1],
+): string => {
+  const { slotsByLevel, pactSlots } = computeSpellSlots(character, classesById);
+  const parts: string[] = [];
+  slotsByLevel.forEach((max, i) => {
+    if (max <= 0) return;
+    const remaining = Math.max(0, max - (character.spellSlotsUsed[String(i + 1)] ?? 0));
+    parts.push(`L${i + 1} ${remaining}/${max}`);
+  });
+  if (pactSlots) {
+    const remaining = Math.max(0, pactSlots.count - character.pactSlotsUsed);
+    parts.push(`Pact L${pactSlots.level} ${remaining}/${pactSlots.count}`);
+  }
+  return parts.length > 0 ? `Spell slots: ${parts.join(' · ')}` : 'Spell slots: none';
+};
 
 const wholeMapBounds = (map: LocationMap): FormationBounds => ({
   minCol: 0,
