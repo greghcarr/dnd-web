@@ -15,10 +15,21 @@ export interface CellMark {
 
 export type CellClickHandler = (col: number, row: number) => void;
 
+// A one-shot floating message the controller asks the arena to pop above a
+// combatant (e.g. a red "action already used" when the engine refuses a cast).
+// Distinct from event-driven combat text, which the arena derives from the log.
+export type FloatingNoticeTone = 'info' | 'error';
+export interface FloatingNotice {
+  readonly subjectId: string;
+  readonly label: string;
+  readonly tone: FloatingNoticeTone;
+}
+
 export class ArenaInteraction {
   private marks: ReadonlyArray<CellMark> = [];
   private clickHandler?: CellClickHandler;
   private readonly listeners = new Set<() => void>();
+  private readonly noticeListeners = new Set<(notice: FloatingNotice) => void>();
 
   getMarks(): ReadonlyArray<CellMark> {
     return this.marks;
@@ -48,6 +59,18 @@ export class ArenaInteraction {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  // Ask the arena to pop a floating notice above a combatant.
+  emitNotice(notice: FloatingNotice): void {
+    for (const listener of this.noticeListeners) listener(notice);
+  }
+
+  onNotice(listener: (notice: FloatingNotice) => void): () => void {
+    this.noticeListeners.add(listener);
+    return () => {
+      this.noticeListeners.delete(listener);
     };
   }
 

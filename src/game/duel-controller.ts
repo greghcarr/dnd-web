@@ -3,6 +3,7 @@ import type {
   SimpleAction,
   CastableSpell,
   LegalSpellTargets,
+  SpellTarget,
 } from './duel-session';
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
@@ -177,7 +178,7 @@ export class DuelController {
     const slotLevel = Math.min(...spell.levelOptions);
     const targeting = this.duel.legalSpellTargets(spellId, slotLevel);
     if (targeting.kind === 'self') {
-      void this.duel.commitSpell(spellId, slotLevel, { targetIds: [this.duel.playerId] });
+      void this.castSpell(spellId, slotLevel, { targetIds: [this.duel.playerId] });
       return;
     }
     if (
@@ -276,12 +277,21 @@ export class DuelController {
       const target = targeting.candidates.find((c) => c.position && at(c.position));
       if (!target) return;
       this.clearSelection();
-      await this.duel.commitSpell(spellId, slotLevel, { targetIds: [target.combatantId] });
+      await this.castSpell(spellId, slotLevel, { targetIds: [target.combatantId] });
     } else if (targeting.kind === 'points') {
       const point = targeting.cells.find((cell) => at(cell));
       if (!point) return;
       this.clearSelection();
-      await this.duel.commitSpell(spellId, slotLevel, { targetPosition: point });
+      await this.castSpell(spellId, slotLevel, { targetPosition: point });
+    }
+  }
+
+  // Cast a spell and, if the engine refuses it (no slot, action already used,
+  // concentration, etc.), pop the reason as red floating text above the player.
+  private async castSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<void> {
+    const outcome = await this.duel.commitSpell(spellId, slotLevel, target);
+    if (!outcome.ok && outcome.reason) {
+      this.interaction.emitNotice({ subjectId: this.duel.playerId, label: outcome.reason, tone: 'error' });
     }
   }
 

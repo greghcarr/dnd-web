@@ -116,6 +116,7 @@ export class ArenaScene extends Phaser.Scene {
   private interaction?: ArenaInteraction;
   private overlay?: Phaser.GameObjects.Graphics;
   private interactionUnsub?: () => void;
+  private noticeUnsub?: () => void;
   private resizeObserver?: ResizeObserver;
   private reframeQueued = false;
   // Tap-to-inspect tooltip: a DOM card showing a combatant's stats, toggled by
@@ -170,6 +171,11 @@ export class ArenaScene extends Phaser.Scene {
         this.frameForMarks(true);
         if (this.interaction!.getMarks().length > 0) this.clearTooltip();
       });
+      // Floating notices the controller pushes (e.g. a refused spell cast) pop
+      // above the named combatant, red for errors.
+      this.noticeUnsub = this.interaction.onNotice((notice) => {
+        this.tokens.get(notice.subjectId)?.addFloatingText(notice.label, notice.tone);
+      });
       this.drawOverlay();
     }
     // Always handle taps: tap a character to toggle its info tooltip; in a
@@ -178,6 +184,7 @@ export class ArenaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       this.interactionUnsub?.();
+      this.noticeUnsub?.();
       this.resizeObserver?.disconnect();
       this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);

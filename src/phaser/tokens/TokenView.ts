@@ -95,10 +95,20 @@ const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
 const TILE_LOWER_HALF_CENTER_FRAC = 0.75;
 const RING_Y = (TILE_LOWER_HALF_CENTER_FRAC - TILE_GROUND_FRAC) * GRID_TILE_PX;
 
-// Floating "combat text": yellow notifications that rise above the head when
-// something happens to the combatant, then fade. Multiple stack upward so they
-// never sit directly on top of each other.
-const FLOAT_TEXT_COLOR = '#ffe44a';
+// Floating "combat text": notifications that rise above the head when something
+// happens to the combatant, then fade. Multiple stack upward so they never sit
+// directly on top of each other. 'info' (the default) reads in yellow; 'error'
+// (e.g. an illegal spell cast the engine refused) reads in red.
+export type FloatingTextKind = 'info' | 'error';
+const FLOAT_INFO_COLOR = '#ffe44a';
+const FLOAT_ERROR_COLOR = '#ff6b6b';
+const FLOAT_TEXT_COLORS: Record<FloatingTextKind, string> = {
+  info: FLOAT_INFO_COLOR,
+  error: FLOAT_ERROR_COLOR,
+};
+// The above-head text font. Single knob: change this to restyle every floating
+// label at once.
+const FLOAT_TEXT_FONT_FAMILY = 'monospace';
 const FLOAT_TEXT_FONT_PX = '11px';
 const FLOAT_BASE_Y = NAME_Y - 18; // just above the name
 const FLOAT_LINE_HEIGHT = 14; // vertical gap between stacked notifications
@@ -299,17 +309,17 @@ export class TokenView {
     this.badge.setPosition(bx + BADGE_TEXT_OFFSET_X, by + BADGE_TEXT_OFFSET_Y);
   }
 
-  // Pop a yellow notification above the head describing something that just
-  // happened to this combatant. New ones sit just above the head and push the
-  // others up so they stack rather than overlap; each fades out after a few
-  // seconds and the stack reflows as they go.
-  addFloatingText(label: string): void {
+  // Pop a notification above the head describing something that just happened to
+  // (or was attempted by) this combatant. 'info' reads yellow, 'error' red. New
+  // ones sit just above the head and push the others up so they stack rather
+  // than overlap; each fades out after a few seconds and the stack reflows.
+  addFloatingText(label: string, kind: FloatingTextKind = 'info'): void {
     if (this.destroyed) return;
     const text = this.scene.add
       .text(0, FLOAT_BASE_Y, label, {
-        fontFamily: 'monospace',
+        fontFamily: FLOAT_TEXT_FONT_FAMILY,
         fontSize: FLOAT_TEXT_FONT_PX,
-        color: FLOAT_TEXT_COLOR,
+        color: FLOAT_TEXT_COLORS[kind],
         stroke: '#000000',
         strokeThickness: 3,
         resolution: LABEL_RESOLUTION,

@@ -28,6 +28,18 @@ export type LegalSpellTargets = ReturnType<Engine['query']['legalSpellTargets']>
 export type BonusActionOption = ReturnType<Engine['query']['bonusActions']>[number];
 export type SpellTarget = { readonly targetIds?: readonly string[]; readonly targetPosition?: Position };
 
+// The result of attempting a spell cast: accepted, or refused with the engine's
+// human-readable reason (e.g. "No spell slots of level 1 available", "Aria
+// cannot cast Fireball: action already used this turn"). The controller surfaces
+// the reason as red floating text above the caster.
+export interface CastOutcome {
+  readonly ok: boolean;
+  readonly reason?: string;
+}
+
+const castRejectionReason = (error: unknown): string =>
+  error instanceof Error && error.message ? error.message : 'Cast failed';
+
 // The self-targeted action-economy actions the Actions menu offers (move and
 // attack have their own command-bar buttons).
 export type SimpleAction = 'dash' | 'disengage' | 'dodge';
@@ -174,10 +186,11 @@ export class DuelSession {
   // route through the dice source (manual or app). Casting is a committing
   // action, so it locks undo. A cast can fail (concentration / economy / edge
   // cases) even past target validation; on failure it aborts cleanly.
-  async commitSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<void> {
-    if (this.phase() !== 'player') return;
+  async commitSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<CastOutcome> {
+    if (this.phase() !== 'player') return { ok: false };
     this.busy = true;
     this.notify();
+    let outcome: CastOutcome = { ok: true };
     try {
       const result = await this.dice.resolve(() =>
         this.engine.plan.castSpell(this.store.currentTail.state, {
@@ -192,11 +205,14 @@ export class DuelSession {
       await playToTail(this.store);
       this.diceRolledThisTurn = true;
       this.undoStack = [];
-    } catch {
-      // Cast rejected (e.g. concentration / action-economy edge); no-op.
+    } catch (error) {
+      // Cast refused (no slot, action already used, concentration, edge cases);
+      // report the reason so the controller can surface it above the caster.
+      outcome = { ok: false, reason: castRejectionReason(error) };
     }
     this.busy = false;
     this.notify();
+    return outcome;
   }
 
   // Perform an enumerated bonus-action option via the engine dispatcher.
