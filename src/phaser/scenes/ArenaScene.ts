@@ -53,7 +53,7 @@ const PROP_OFFSET_X = GRID_TILE_PX * 0.5;
 const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
 // An occluding prop fades to this alpha while a character stands behind it, so
 // the character isn't hidden.
-const OCCLUDER_FADE_ALPHA = 0.5;
+const OCCLUDER_FADE_ALPHA = 0.4;
 
 // A prop that can hide a combatant standing behind it: trees, bushes, boulders,
 // and decorative stones. `tall` props (trees, boulders) are impassable cover
