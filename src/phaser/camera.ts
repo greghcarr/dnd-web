@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { FormationBounds } from '@/spatial/formation';
 import { GRID_TILE_PX, CAMERA_PADDING_TILES, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM } from '@/constants/layout';
 import { CAMERA_PAN_MS } from '@/constants/timing';
+import { RENDER_SCALE } from '@/phaser/render-scale';
 
 // Fit a tile bounding box (plus padding) into the map canvas and centre it.
 // The canvas occupies its own layout area (no overlapping panel), so the
@@ -22,10 +23,14 @@ export const frameBounds = (
   const contentW = right - left;
   const contentH = bottom - top;
 
+  // camera.width/height are in buffer pixels (RENDER_SCALE x the CSS size),
+  // so the fit and the zoom clamp scale by RENDER_SCALE too. The effective
+  // on-screen zoom (camera zoom / RENDER_SCALE) then stays within
+  // [CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM] regardless of the device's DPR.
   const zoom = Phaser.Math.Clamp(
     Math.min(camera.width / contentW, camera.height / contentH),
-    CAMERA_MIN_ZOOM,
-    CAMERA_MAX_ZOOM,
+    CAMERA_MIN_ZOOM * RENDER_SCALE,
+    CAMERA_MAX_ZOOM * RENDER_SCALE,
   );
   const cx = (left + right) / 2;
   const cy = (top + bottom) / 2;

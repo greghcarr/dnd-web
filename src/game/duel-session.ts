@@ -99,6 +99,7 @@ export class DuelSession {
       totalEvents: setup.events.length,
       scrubCache: liveCache,
       narration: renarrate(setup),
+      playerId,
     };
 
     this.store = new LiveStore(liveSession, renarrate);

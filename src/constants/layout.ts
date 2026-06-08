@@ -45,5 +45,11 @@ export const CAMERA_PADDING_TILES = 2;
 export const CAMERA_MIN_ZOOM = 0.5;
 export const CAMERA_MAX_ZOOM = 3.5;
 
+// Cap on the device-pixel-ratio the arena renders its drawing buffer at.
+// Rendering at the screen's DPR keeps text and sprites crisp on high-DPR
+// phones (where a 1x buffer is otherwise browser-upscaled and blurred);
+// the cap bounds fill rate, since cost scales with RENDER_SCALE squared.
+export const MAX_RENDER_SCALE = 3;
+
 // DOM shell: width of the right-hand panel column on desktop.
 export const RIGHT_COL_PX = 384;

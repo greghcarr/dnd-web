@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
-import type { LocationMap } from 'dnd-srd-engine';
+import type { Character, LocationMap } from 'dnd-srd-engine';
 import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
-import type { FormationBounds } from '@/spatial/formation';
+import type { FormationBounds, Team } from '@/spatial/formation';
 import { combatantPositions, cellOf } from '@/spatial/engine-positions';
 import { TokenView } from '@/phaser/tokens/TokenView';
 import { registerCharacterAnims } from '@/phaser/anims';
 import { frameBounds } from '@/phaser/camera';
+import { fitGameToParent } from '@/phaser/render-scale';
 import {
   spriteKeyFor,
   GROUND_KEY,
@@ -24,7 +25,14 @@ import {
   SHOW_GRID,
 } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
-import { GROUND_BASE_COLOR, GRID_LINE_COLOR, GRID_LINE_ALPHA } from '@/constants/colors';
+import {
+  GROUND_BASE_COLOR,
+  GRID_LINE_COLOR,
+  GRID_LINE_ALPHA,
+  CLASS_NAME_OUTLINE_COLORS,
+  TEAM_A_COLOR,
+  TEAM_B_COLOR,
+} from '@/constants/colors';
 import { makeRng, type Rng } from '@/phaser/rng';
 import type { ArenaInteraction } from '@/phaser/interaction';
 import {
@@ -102,19 +110,18 @@ export class ArenaScene extends Phaser.Scene {
     registerCharacterAnims(this);
     this.store = this.registry.get('store') as SnapshotSource;
     this.scale.on(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
-    // Phaser's RESIZE mode only watches the window, so a CSS-driven arena
-    // resize (collapsing the right column) or a mobile viewport change (iOS
-    // Safari toolbar show/hide, rotation) never reaches it and the camera
-    // stops re-centering. Observe the canvas parent directly, refresh the
-    // scale manager to the new size, then reframe on the next frame (once the
-    // canvas + camera have settled at that size).
+    // Size the device-resolution buffer to the parent now (covers the initial
+    // layout before the first window/observer event).
+    fitGameToParent(this.game);
+    // The game runs in Scale.NONE, so nothing auto-tracks the parent's size.
+    // A CSS-driven arena resize (collapsing the right column) or a mobile
+    // viewport change (iOS Safari toolbar show/hide, rotation) must refit the
+    // buffer and re-center. Observe the canvas parent directly, refit to the
+    // new size, then reframe on the next frame (once canvas + camera settle).
     const arenaParent = this.game.canvas.parentElement;
     if (arenaParent && typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => {
-        // Convert the element resize into a window resize: Phaser's RESIZE mode
-        // re-fits the canvas to its parent on the window 'resize' event, but
-        // scale.refresh() alone did not actually resize the canvas here.
-        window.dispatchEvent(new Event('resize'));
+        fitGameToParent(this.game);
         this.scheduleReframe();
       });
       this.resizeObserver.observe(arenaParent);
@@ -406,7 +413,14 @@ export class ArenaScene extends Phaser.Scene {
       const character = state.characters[id];
       const kind: CharacterKind = character?.kind ?? 'pc';
       const index = kind === 'creature' ? creatureIndex++ : humanIndex++;
-      const token = new TokenView(this, placement, spriteKeyFor(kind, index), character?.name ?? id);
+      const token = new TokenView(
+        this,
+        placement,
+        spriteKeyFor(kind, index),
+        character?.name ?? id,
+        nameOutlineColor(character, placement.team),
+        id === session.playerId,
+      );
       this.tokens.set(id, token);
     }
   }
@@ -532,6 +546,17 @@ export class ArenaScene extends Phaser.Scene {
     frameBounds(this.cameras.main, target, animate);
   }
 }
+
+// A combatant's most-advanced class (the colour-defining one for multiclass).
+const primaryClassId = (character: Character): string =>
+  character.classes.reduce((a, b) => (b.level > a.level ? b : a)).classId;
+
+// The name-label outline colour: the combatant's class colour, falling back
+// to their team colour when they have no recognised class (e.g. monsters).
+const nameOutlineColor = (character: Character | undefined, team: Team): number => {
+  const classColor = character ? CLASS_NAME_OUTLINE_COLORS[primaryClassId(character)] : undefined;
+  return classColor ?? (team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR);
+};
 
 // Expand the weighted prop specs into a flat pool for uniform draws.
 const weightedPool = (): typeof PROP_SPECS => {

@@ -23,4 +23,7 @@ export interface Session {
   // Present only for tactical battles: the arena's terrain grid. Its
   // presence is what tells the arena to render cover and animate movement.
   readonly map?: LocationMap;
+  // The player-controlled combatant in an interactive duel, so the arena can
+  // badge it. Absent in the replay viewers (no one is player-controlled).
+  readonly playerId?: string;
 }

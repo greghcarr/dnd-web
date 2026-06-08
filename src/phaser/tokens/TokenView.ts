@@ -30,24 +30,40 @@ import {
   BLINK_DURATION_MS,
 } from '@/constants/timing';
 import {
-  TEAM_A_COLOR,
-  TEAM_B_COLOR,
   ACTIVE_RING_COLOR,
   HP_BAR_BG_COLOR,
   HP_BAR_FILL_COLOR,
   HP_BAR_LOW_COLOR,
   HP_BAR_LOW_THRESHOLD,
   HIT_FLASH_COLOR,
+  PLAYER_BADGE_BG_COLOR,
+  PLAYER_BADGE_TEXT_COLOR,
   cssHex,
 } from '@/constants/colors';
 
 const SPRITE_SCALE = 1.4;
-// pixelArt mode upscales every texture with nearest-neighbor, so the tiny
-// label textures turn blocky when the camera zooms in (up to
-// CAMERA_MAX_ZOOM). Rendering the labels at this many device pixels per CSS
-// pixel gives the zoom enough source detail to stay crisp; the pixel-art
-// sprites are untouched.
+// pixelArt mode renders every texture at this many device pixels per CSS
+// pixel so the labels carry enough source detail at the camera's max zoom
+// (CAMERA_MAX_ZOOM) and on high-DPR phone screens; the pixel-art sprites
+// are untouched.
 const LABEL_RESOLUTION = Math.ceil(CAMERA_MAX_ZOOM * Math.max(1, window.devicePixelRatio || 1));
+// pixelArt forces nearest-neighbor filtering on every texture, which is
+// right for the sprites but minifies the high-res label canvases into
+// blocky, unreadable text (worst on phones). The labels opt into smooth
+// linear filtering instead; it must be re-applied after each setText
+// because Phaser re-uploads the label texture (as nearest) on every edit.
+const LABEL_FILTER = Phaser.Textures.FilterMode.LINEAR;
+// Label font sizes (px before LABEL_RESOLUTION scaling). Sized for legibility
+// on a phone where the whole arena is fit into a small viewport.
+const HP_FONT_PX = '11px';
+const NAME_FONT_PX = '13px';
+// The "1P" badge on the player-controlled combatant's name: a small pill
+// sitting just left of the name.
+const PLAYER_BADGE_LABEL = '1P';
+const BADGE_FONT_PX = '10px';
+const BADGE_PAD_X = 3;
+const BADGE_PAD_Y = 1;
+const BADGE_GAP_PX = 3;
 // Feet sit at the container origin (the tile ground point); the head is
 // this far above it, so the HP bar and name sit just above the head.
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
@@ -72,7 +88,7 @@ export class TokenView {
   private readonly hpFill: Phaser.GameObjects.Rectangle;
   private readonly hpText: Phaser.GameObjects.Text;
   private readonly nameText: Phaser.GameObjects.Text;
-  private readonly teamColor: number;
+  private readonly playerBadge?: Phaser.GameObjects.Text;
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -84,7 +100,14 @@ export class TokenView {
   private dead = false;
   private destroyed = false;
 
-  constructor(scene: Phaser.Scene, placement: Placement, characterKey: string, name: string) {
+  constructor(
+    scene: Phaser.Scene,
+    placement: Placement,
+    characterKey: string,
+    name: string,
+    nameOutlineColor: number,
+    isPlayer: boolean,
+  ) {
     this.scene = scene;
     this.characterKey = characterKey;
     this.facing = placement.facing;
@@ -94,7 +117,6 @@ export class TokenView {
     // carries its own baked-in shadow, so no extra shadow is drawn here.
     const x = (placement.col + 0.5) * GRID_TILE_PX;
     const y = (placement.row + TILE_GROUND_FRAC) * GRID_TILE_PX;
-    this.teamColor = placement.team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR;
 
     this.ring = scene.add.graphics();
     this.idleTexture = animTextureKey(characterKey, 'idle');
@@ -118,34 +140,54 @@ export class TokenView {
     this.hpText = scene.add
       .text(0, BAR_Y, '', {
         fontFamily: 'monospace',
-        fontSize: '9px',
+        fontSize: HP_FONT_PX,
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 2,
         resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 0.5);
-    // The name's outline color marks which side the combatant is on.
+    // The name's outline color is the combatant's class color.
     this.nameText = scene.add
       .text(0, NAME_Y, name, {
         fontFamily: 'monospace',
-        fontSize: '11px',
+        fontSize: NAME_FONT_PX,
         color: '#e6e8ee',
-        stroke: cssHex(this.teamColor),
+        stroke: cssHex(nameOutlineColor),
         strokeThickness: 3,
         resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 1);
+    this.hpText.texture.setFilter(LABEL_FILTER);
+    this.nameText.texture.setFilter(LABEL_FILTER);
 
-    this.container = scene.add.container(x, y, [
+    // Mark the player-controlled combatant with a "1P" pill left of the name.
+    if (isPlayer) {
+      this.playerBadge = scene.add
+        .text(0, NAME_Y, PLAYER_BADGE_LABEL, {
+          fontFamily: 'monospace',
+          fontSize: BADGE_FONT_PX,
+          color: cssHex(PLAYER_BADGE_TEXT_COLOR),
+          backgroundColor: cssHex(PLAYER_BADGE_BG_COLOR),
+          padding: { x: BADGE_PAD_X, y: BADGE_PAD_Y },
+          resolution: LABEL_RESOLUTION,
+        })
+        .setOrigin(1, 1);
+      this.playerBadge.texture.setFilter(LABEL_FILTER);
+    }
+
+    const children: Phaser.GameObjects.GameObject[] = [
       this.ring,
       this.sprite,
       hpBg,
       this.hpFill,
       this.hpText,
       this.nameText,
-    ]);
+    ];
+    if (this.playerBadge) children.push(this.playerBadge);
+    this.container = scene.add.container(x, y, children);
     this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
+    this.layoutPlayerBadge();
     this.drawRing(false);
   }
 
@@ -184,13 +226,32 @@ export class TokenView {
     this.blinkTimer = undefined;
   }
 
-  // Only the active combatant shows a ring; team is conveyed by the name
-  // outline instead.
+  // Only the active combatant shows a ring; the name outline conveys class.
   private drawRing(active: boolean): void {
     this.ring.clear();
     if (!active) return;
     this.ring.lineStyle(4, ACTIVE_RING_COLOR, 1);
     this.ring.strokeEllipse(0, RING_Y, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
+  }
+
+  // Set a label's text, re-applying linear filtering: Phaser re-uploads the
+  // label texture as nearest-neighbor on every setText (pixelArt default),
+  // which would otherwise leave the updated text blocky.
+  private setLabel(label: Phaser.GameObjects.Text, value: string): void {
+    label.setText(value);
+    label.texture.setFilter(LABEL_FILTER);
+  }
+
+  // Set the name label and keep the player badge tucked against its left edge
+  // (the name is center-anchored, so the badge position depends on its width).
+  private setName(name: string): void {
+    this.setLabel(this.nameText, name);
+    this.layoutPlayerBadge();
+  }
+
+  private layoutPlayerBadge(): void {
+    if (!this.playerBadge) return;
+    this.playerBadge.setPosition(-this.nameText.displayWidth / 2 - BADGE_GAP_PX, NAME_Y);
   }
 
   // Declarative: reflect the engine state at the cursor.
@@ -206,7 +267,7 @@ export class TokenView {
     this.scene.tweens.killTweensOf(this.hpFill);
     this.scene.tweens.add({ targets: this.hpFill, scaleX: frac, duration: HP_TWEEN_MS, ease: 'Quad.easeOut' });
     this.hpFill.setFillStyle(frac <= HP_BAR_LOW_THRESHOLD ? HP_BAR_LOW_COLOR : HP_BAR_FILL_COLOR);
-    this.hpText.setText(`${Math.max(0, character.hp.current)}/${character.hp.max}`);
+    this.setLabel(this.hpText, `${Math.max(0, character.hp.current)}/${character.hp.max}`);
 
     const isDead = character.hp.current <= 0;
     if (isDead && !this.dead) {
@@ -220,7 +281,7 @@ export class TokenView {
       this.playIdle();
     }
 
-    this.nameText.setText(character.name);
+    this.setName(character.name);
     this.drawRing(isActive);
   }
 
