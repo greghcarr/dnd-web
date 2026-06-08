@@ -72,9 +72,13 @@ const BADGE_FONT_PX = '5px';
 const BADGE_FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 // Pill corner radius as a fraction of its height (0.5 = full capsule).
 const BADGE_PILL_RADIUS_FRAC = 0.35;
+// Nudge the label off its bounding box so the glyphs sit centered in the pill
+// (the text box carries descent space below and side bearing on the left).
+const BADGE_TEXT_OFFSET_X = 1;
+const BADGE_TEXT_OFFSET_Y = 1;
 const BADGE_PAD_X = 2;
 const BADGE_PAD_Y = 1;
-const BADGE_GAP_PX = 2;
+const BADGE_GAP_PX = 5;
 // Feet sit at the container origin (the tile ground point); the head is
 // this far above it, so the HP bar and name sit just above the head.
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
@@ -273,12 +277,13 @@ export class TokenView {
     // it with padding and fully rounded ends (radius = half its height).
     const bx = -this.nameText.displayWidth / 2 - BADGE_GAP_PX;
     const by = NAME_Y - this.nameText.displayHeight / 2;
-    this.badge.setPosition(bx, by);
     const w = this.badge.displayWidth + BADGE_PAD_X * 2;
     const h = this.badge.displayHeight + BADGE_PAD_Y * 2;
     this.badgePill.clear();
     this.badgePill.fillStyle(this.badgeColor ?? 0, 1);
     this.badgePill.fillRoundedRect(bx - this.badge.displayWidth - BADGE_PAD_X, by - h / 2, w, h, h * BADGE_PILL_RADIUS_FRAC);
+    // Nudge the label off its box so the glyphs sit centered in the pill.
+    this.badge.setPosition(bx + BADGE_TEXT_OFFSET_X, by + BADGE_TEXT_OFFSET_Y);
   }
 
   // Declarative: reflect the engine state at the cursor.
