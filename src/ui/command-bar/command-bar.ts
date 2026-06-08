@@ -107,6 +107,8 @@ export const mountCommandBar = (parent: HTMLElement, handlers: CommandBarHandler
       spellsBtn.disabled = !view.canSpells;
       undoBtn.disabled = !view.canUndo;
       endBtn.disabled = view.phase !== 'player';
+      // Suggest ending the turn only once no action or bonus action is left.
+      endBtn.classList.toggle('suggested', !view.action && !view.bonus);
       moveBtn.classList.toggle('active', view.selecting === 'move');
       attackBtn.classList.toggle('active', view.selecting === 'attack');
     },

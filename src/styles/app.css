@@ -470,6 +470,10 @@ body {
 }
 .cmd-end {
   margin-left: 0.6rem;
+}
+/* Highlight End Turn only when there's nothing left to do (no action and no
+   bonus action remaining), nudging the player to end their turn. */
+.cmd-end.suggested {
   background: rgba(74, 137, 255, 0.22);
   border-color: var(--accent);
 }
