@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { computeSpellSlots, type Character, type LocationMap } from 'dnd-srd-engine';
+import { computeSpellSlots, type Character, type LocationMap, type ResolvedContent } from 'dnd-srd-engine';
 import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import type { FuzzBattleResult } from '@engine-fuzz';
@@ -670,10 +670,10 @@ export class ArenaScene extends Phaser.Scene {
     this.tooltip.style.top = `${(event?.clientY ?? 0) + TOOLTIP_OFFSET_PX}px`;
   }
 
-  // Fill the tooltip with the combatant's name, descriptor, HP, and spell
-  // slots remaining, from engine state at the current cursor. textContent (not
-  // innerHTML) keeps the player-entered name injection-safe. Returns false if
-  // the combatant is gone.
+  // Fill the tooltip with the combatant's name, descriptor, HP, spell slots
+  // remaining, and (for casters) their spell list grouped by level, from engine
+  // state at the current cursor. textContent (not innerHTML) keeps the
+  // player-entered name injection-safe. Returns false if the combatant is gone.
   private populateTooltip(id: string): boolean {
     const snapshot = this.lastSnapshot;
     if (!snapshot || !this.tooltip) return false;
@@ -699,6 +699,20 @@ export class ArenaScene extends Phaser.Scene {
       lineEl.className = 'tt-line';
       lineEl.textContent = line;
       this.tooltip.appendChild(lineEl);
+    }
+    // Spell list (casters only), as a titled section at the bottom.
+    const spellLines = characterSpellLines(character, content);
+    if (spellLines.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'tt-spells-title';
+      title.textContent = 'Spells';
+      this.tooltip.appendChild(title);
+      for (const line of spellLines) {
+        const spellEl = document.createElement('div');
+        spellEl.className = 'tt-spell';
+        spellEl.textContent = line;
+        this.tooltip.appendChild(spellEl);
+      }
     }
     return true;
   }
@@ -834,6 +848,28 @@ const spellSlotsLabel = (
     parts.push(`Pact L${pactSlots.level} ${remaining}/${pactSlots.count}`);
   }
   return parts.length > 0 ? `Spell slots: ${parts.join(' · ')}` : 'Spell slots: none';
+};
+
+// The character's spells (union of prepared and known, so it covers both
+// prepared and known casters) grouped by level into compact lines, e.g.
+// "Cantrips: Fire Bolt, Light" / "Level 1: Mage Armor, Shield". Empty for
+// non-casters.
+const characterSpellLines = (character: Character, content: ResolvedContent): string[] => {
+  const ids = new Set<string>([...character.preparedSpells, ...character.knownSpells]);
+  if (ids.size === 0) return [];
+  const namesByLevel = new Map<number, string[]>();
+  for (const id of ids) {
+    const spell = content.spells.get(id);
+    const names = namesByLevel.get(spell?.level ?? 0) ?? [];
+    names.push(spell?.name ?? id);
+    namesByLevel.set(spell?.level ?? 0, names);
+  }
+  return [...namesByLevel.keys()]
+    .sort((a, b) => a - b)
+    .map((level) => {
+      const names = namesByLevel.get(level)!.sort((a, b) => a.localeCompare(b)).join(', ');
+      return `${level === 0 ? 'Cantrips' : `Level ${level}`}: ${names}`;
+    });
 };
 
 const wholeMapBounds = (map: LocationMap): FormationBounds => ({
