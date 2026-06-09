@@ -22,6 +22,7 @@ import { DuelController } from '@/game/duel-controller';
 import type { RunConfig } from '@/game/run-config';
 import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
 import { mountStartScreen } from '@/ui/start-screen';
+import { mountSignInScreen } from '@/ui/sign-in-screen';
 import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
 import { mountModeSelector } from '@/ui/mode-selector';
@@ -244,6 +245,11 @@ const boot = (): void => {
 
   mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
   switchMode(DEFAULT_APP_MODE_ID);
+
+  // Entry gate: the dndbnb-styled sign-in screen overlays the (already running)
+  // app until the player signs in or, for now, continues as a guest. Real auth
+  // is a later step; "Continue in guest mode" just reveals the app underneath.
+  const signIn = mountSignInScreen(document.body, () => signIn.unmount());
 };
 
 boot();

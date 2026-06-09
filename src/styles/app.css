@@ -1014,6 +1014,97 @@ body {
   background: rgba(35, 40, 52, 0.96);
 }
 
+/* Entry-gate sign-in screen, styled after dndbnb's account screen (its neutral
+   dark palette, distinct from the blue game UI). Full-screen over the running
+   app until the player continues as a guest. */
+#signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+  background: #131418;
+  color: #dbdee1;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+#signin-screen [hidden] {
+  display: none;
+}
+#signin-screen .auth-card {
+  width: min(22rem, 100%);
+  padding: 1.5rem;
+  text-align: center;
+  background: #1c1d22;
+  border: 1px solid #2e3138;
+  border-radius: 0.5rem;
+}
+#signin-screen .auth-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+}
+#signin-screen .auth-subtitle {
+  margin: 0 0 1rem;
+}
+#signin-screen .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+#signin-screen .auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #8a8f99;
+}
+#signin-screen .auth-form input {
+  font: inherit;
+  padding: 0.5rem;
+  background: #131418;
+  color: #dbdee1;
+  border: 1px solid #2e3138;
+  border-radius: 0.375rem;
+}
+#signin-screen .form-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8a8f99;
+}
+#signin-screen .auth-submit {
+  margin-top: 0.25rem;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: #c0c4cb;
+  color: #15171a;
+  border: 1px solid #2e3138;
+  border-radius: 0.375rem;
+}
+#signin-screen .auth-toggle {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: #8a8f99;
+}
+#signin-screen .link-button {
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: #c0c4cb;
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+#signin-screen .guest-link {
+  font-size: 0.95rem;
+}
+
 /* Phones / narrow screens: stack the map on top and the panels below,
    instead of an unusable 384px side column. */
 @media (max-width: 720px) {
