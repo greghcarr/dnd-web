@@ -24,6 +24,7 @@ import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
 import { mountStartScreen } from '@/ui/start-screen';
 import { mountSignInScreen } from '@/ui/sign-in-screen';
 import { supabase } from '@/auth/supabase';
+import { fetchDuelCharacters, type DuelCharacterOption } from '@/auth/characters';
 import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
 import { mountModeSelector } from '@/ui/mode-selector';
@@ -111,6 +112,9 @@ const boot = (): void => {
   // (same seed + level + tactical config), e.g. "Level 5 Human Berserker
   // Barbarian". Generated once at boot; deterministic, so it matches the run.
   const dailyHero = describeDailyHero(bridge);
+  // The duel menu's character picker: the signed-in player's dndbnb characters,
+  // formatted against the engine content. Empty in guest mode.
+  const loadCharacters = (): Promise<DuelCharacterOption[]> => fetchDuelCharacters(bridge.getContent());
   let currentConfig: BattleConfig = { ...DEFAULT_CONFIG };
   let currentMovement: FuzzMovement = currentConfig.movement ?? 'none';
   const store = new ReplayStore(bridge.startBattle(currentConfig));
@@ -175,7 +179,7 @@ const boot = (): void => {
     // form with a prior run's settings (so quitting/finishing reopens the menu
     // exactly where that run was configured).
     function showStart(initial?: RunConfig): void {
-      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, initial, (config) => {
+      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, loadCharacters, initial, (config) => {
         start.unmount();
         teardownActive = runDuel(config);
       });
@@ -244,18 +248,28 @@ const boot = (): void => {
     teardownMode = entry.mode.mount(ctx);
   };
 
-  mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
-  switchMode(DEFAULT_APP_MODE_ID);
-
-  // Entry gate: the dndbnb-styled sign-in screen overlays the (already running)
-  // app until the player signs in with their dndbnb account or continues as a
-  // guest. Skip it when a session already persists from a prior visit; either
-  // path just reveals the app underneath.
+  // Build the duel UI (mode selector + start screen) only once the auth state
+  // is known, so the start screen's character picker fetches against the right
+  // session. The dndbnb-styled sign-in gate shows first unless a session already
+  // persists; signing in or continuing as a guest then reveals the app.
+  const startApp = (): void => {
+    mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
+    switchMode(DEFAULT_APP_MODE_ID);
+  };
   void supabase.auth.getSession().then(({ data }) => {
-    if (data.session) return;
+    if (data.session) {
+      startApp();
+      return;
+    }
     const signIn = mountSignInScreen(document.body, {
-      onAuthed: () => signIn.unmount(),
-      onGuest: () => signIn.unmount(),
+      onAuthed: () => {
+        signIn.unmount();
+        startApp();
+      },
+      onGuest: () => {
+        signIn.unmount();
+        startApp();
+      },
     });
   });
 };

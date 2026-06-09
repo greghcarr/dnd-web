@@ -1,4 +1,5 @@
 import type { RunConfig } from '@/game/run-config';
+import type { DuelCharacterOption } from '@/auth/characters';
 import { dailySeed, dailyClass } from '@/game/daily';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
 import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL, DAILY_LEVEL, ENGINE_SRD_COMPLETE_LEVEL } from '@/constants/app';
@@ -35,12 +36,14 @@ interface FormState {
   readonly level: string;
   readonly seed: string;
   readonly manualDice: boolean;
+  readonly characterId: string;
 }
 
 export const mountStartScreen = (
   parent: HTMLElement,
   classes: ReadonlyArray<ClassOption>,
   dailyHero: string,
+  loadCharacters: () => Promise<DuelCharacterOption[]>,
   initial: RunConfig | undefined,
   onBegin: (config: RunConfig) => void,
 ): StartScreen => {
@@ -55,6 +58,7 @@ export const mountStartScreen = (
         <label class="start-field">Level <select class="start-select start-level-select"></select></label>
         <p class="start-level-warning"></p>
       </div>
+      <label class="start-field start-character-field" hidden>Character <select class="start-select start-character-select"></select></label>
       <div class="start-seed">
         <label>Seed <input type="number" class="start-seed-input" min="0" step="1" /></label>
         <button type="button" class="start-reroll" aria-label="Random seed" title="Random seed">⟳</button>
@@ -85,6 +89,8 @@ export const mountStartScreen = (
   const dailyCheck = select<HTMLInputElement>('.start-daily-check');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
   const levelWarning = select<HTMLElement>('.start-level-warning');
+  const characterField = select<HTMLElement>('.start-character-field');
+  const characterSelect = select<HTMLSelectElement>('.start-character-select');
 
   // Class dropdown: a random pick plus every pinnable class.
   const randomOption = document.createElement('option');
@@ -104,6 +110,29 @@ export const mountStartScreen = (
     option.textContent = `Level ${level} ${mark}`;
     levelSelect.appendChild(option);
   }
+
+  // Character picker: a "generate" default plus the signed-in player's dndbnb
+  // characters, loaded asynchronously. The field stays hidden in guest mode (or
+  // when the account has no characters), so only signed-in players with saved
+  // characters see it.
+  const generateOption = document.createElement('option');
+  generateOption.value = '';
+  generateOption.textContent = 'Generate a random character';
+  characterSelect.appendChild(generateOption);
+  void loadCharacters().then((characters) => {
+    if (!characterSelect.isConnected || characters.length === 0) return;
+    for (const character of characters) {
+      const option = document.createElement('option');
+      option.value = character.id;
+      option.textContent = character.label;
+      characterSelect.appendChild(option);
+    }
+    characterField.hidden = false;
+    // Restore a reopened run's pick once its option exists (free duels only).
+    if (initial?.dndbnbCharacterId && !dailyCheck.checked && characters.some((c) => c.id === initial.dndbnbCharacterId)) {
+      characterSelect.value = initial.dndbnbCharacterId;
+    }
+  });
 
   // Default the form to today's daily class + level (a familiar starting point)
   // but with a fresh random seed, so a default Begin is a daily-like free duel
@@ -128,12 +157,14 @@ export const mountStartScreen = (
   const lockRows: HTMLElement[] = [
     classSelect.closest('label')!,
     levelSelect.closest('label')!,
+    characterField,
     select<HTMLElement>('.start-seed'),
     manualCheck.closest('label')!,
   ];
   const setLocked = (locked: boolean): void => {
     classSelect.disabled = locked;
     levelSelect.disabled = locked;
+    characterSelect.disabled = locked;
     seedInput.disabled = locked;
     reroll.disabled = locked;
     manualCheck.disabled = locked;
@@ -155,12 +186,15 @@ export const mountStartScreen = (
         level: levelSelect.value,
         seed: seedInput.value,
         manualDice: manualCheck.checked,
+        characterId: characterSelect.value,
       };
-      // Snap to today's daily (a specific pinned-class Free Duel) and lock.
+      // Snap to today's daily (a specific pinned-class Free Duel) and lock. The
+      // daily uses its own generated character, so clear any picked one.
       classSelect.value = dailyClass();
       levelSelect.value = String(DAILY_LEVEL);
       seedInput.value = String(dailySeed());
       manualCheck.checked = false; // the daily is always app-rolled
+      characterSelect.value = '';
       setLocked(true);
     } else {
       if (saved) {
@@ -168,6 +202,7 @@ export const mountStartScreen = (
         levelSelect.value = saved.level;
         seedInput.value = saved.seed;
         manualCheck.checked = saved.manualDice;
+        characterSelect.value = saved.characterId;
       }
       setLocked(false);
     }
@@ -188,8 +223,9 @@ export const mountStartScreen = (
     const seed = Number.isFinite(parsed) && parsed >= 0 ? parsed : randomSeed();
     const level = Number.parseInt(levelSelect.value, 10) || DEFAULT_LEVEL;
     const playerClass = classSelect.value || undefined;
+    const dndbnbCharacterId = characterSelect.value || undefined;
     setBoolSetting(SettingKey.ManualDice, manualCheck.checked);
-    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass, playerName });
+    onBegin({ kind: 'free', seed, manualDice: manualCheck.checked, level, playerClass, playerName, dndbnbCharacterId });
   });
 
   // Reopening after a run (quit / finished): restore the fields to how that

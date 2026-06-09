@@ -20,4 +20,8 @@ export interface RunConfig {
   // log). Undefined keeps the engine's generated name. Cosmetic only: it
   // does not affect the battle, so it never perturbs the daily's determinism.
   readonly playerName?: string;
+  // The chosen dndbnb character's id (free duels only), from the menu picker.
+  // Not yet consumed by the battle builder — that wiring is the next step; for
+  // now it preserves the choice across menu reopen.
+  readonly dndbnbCharacterId?: string;
 }
