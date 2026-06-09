@@ -79,6 +79,7 @@ export const mountStartScreen = (
   const reroll = select<HTMLButtonElement>('.start-reroll');
   const dailyCheck = select<HTMLInputElement>('.start-daily-check');
   const manualCheck = select<HTMLInputElement>('.start-manual-check');
+  const levelWarning = select<HTMLElement>('.start-level-warning');
 
   // Class dropdown: a random pick plus every pinnable class.
   const randomOption = document.createElement('option');
@@ -106,10 +107,16 @@ export const mountStartScreen = (
   seedInput.value = String(randomSeed());
   manualCheck.checked = getBoolSetting(SettingKey.ManualDice);
   select('.start-daily-desc').textContent = dailyHero;
-  // Caveat: the engine only fully implements SRD class features through
-  // ENGINE_SRD_COMPLETE_LEVEL; above it, play gets increasingly unexpected.
-  select('.start-level-warning').textContent =
+  // Caveat shown only above the level the engine fully implements SRD class
+  // features through (ENGINE_SRD_COMPLETE_LEVEL); above it play gets
+  // increasingly unexpected.
+  levelWarning.textContent =
     `This game will display increasingly unexpected results above level ${ENGINE_SRD_COMPLETE_LEVEL}. It is not recommended to play at these levels.`;
+  const syncLevelWarning = (): void => {
+    levelWarning.hidden = (Number.parseInt(levelSelect.value, 10) || 0) <= ENGINE_SRD_COMPLETE_LEVEL;
+  };
+  levelSelect.addEventListener('change', syncLevelWarning);
+  syncLevelWarning();
 
   // Rows that lock (disabled + dimmed) while the daily tick is on.
   const lockRows: HTMLElement[] = [
@@ -158,6 +165,7 @@ export const mountStartScreen = (
       }
       setLocked(false);
     }
+    syncLevelWarning();
   });
 
   select('[data-start="begin"]').addEventListener('click', () => {
@@ -187,6 +195,7 @@ export const mountStartScreen = (
     levelSelect.value = String(initial.level);
     seedInput.value = String(initial.seed);
     manualCheck.checked = initial.manualDice;
+    syncLevelWarning();
     if (initial.kind === 'daily') {
       dailyCheck.checked = true;
       dailyCheck.dispatchEvent(new Event('change'));
