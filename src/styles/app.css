@@ -1076,6 +1076,11 @@ body {
   font-size: 0.85rem;
   color: #8a8f99;
 }
+#signin-screen .form-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f26b6b;
+}
 #signin-screen .auth-submit {
   margin-top: 0.25rem;
   padding: 0.55rem 1rem;

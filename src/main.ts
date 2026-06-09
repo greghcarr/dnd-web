@@ -23,6 +23,7 @@ import type { RunConfig } from '@/game/run-config';
 import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
 import { mountStartScreen } from '@/ui/start-screen';
 import { mountSignInScreen } from '@/ui/sign-in-screen';
+import { supabase } from '@/auth/supabase';
 import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
 import { mountModeSelector } from '@/ui/mode-selector';
@@ -247,9 +248,16 @@ const boot = (): void => {
   switchMode(DEFAULT_APP_MODE_ID);
 
   // Entry gate: the dndbnb-styled sign-in screen overlays the (already running)
-  // app until the player signs in or, for now, continues as a guest. Real auth
-  // is a later step; "Continue in guest mode" just reveals the app underneath.
-  const signIn = mountSignInScreen(document.body, () => signIn.unmount());
+  // app until the player signs in with their dndbnb account or continues as a
+  // guest. Skip it when a session already persists from a prior visit; either
+  // path just reveals the app underneath.
+  void supabase.auth.getSession().then(({ data }) => {
+    if (data.session) return;
+    const signIn = mountSignInScreen(document.body, {
+      onAuthed: () => signIn.unmount(),
+      onGuest: () => signIn.unmount(),
+    });
+  });
 };
 
 boot();
