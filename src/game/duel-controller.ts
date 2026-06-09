@@ -173,16 +173,19 @@ export class DuelController {
         this.chooseSpell(id.slice(SPELL_OPTION_PREFIX.length));
         return;
       }
-      this.useBonusOption(id);
+      void this.useBonusOption(id);
     });
   }
 
-  private useBonusOption(optionId: string): void {
+  private async useBonusOption(optionId: string): Promise<void> {
     const option = this.duel.bonusActions().find((o) => o.id === optionId);
     if (!option) return;
     // 1v1: a creature-target bonus action targets the lone opponent.
     const targetId = option.target === 'creature' ? this.duel.enemyId : undefined;
-    void this.duel.commitOption(optionId, targetId);
+    const outcome = await this.duel.commitOption(optionId, { targetId });
+    if (!outcome.ok && outcome.reason) {
+      this.interaction.emitNotice({ subjectId: this.duel.playerId, label: outcome.reason, tone: 'error' });
+    }
   }
 
   // Pick a spell: cast self-targeted spells immediately; otherwise park in

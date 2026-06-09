@@ -28,17 +28,21 @@ export type LegalSpellTargets = ReturnType<Engine['query']['legalSpellTargets']>
 export type BonusActionOption = ReturnType<Engine['query']['bonusActions']>[number];
 export type SpellTarget = { readonly targetIds?: readonly string[]; readonly targetPosition?: Position };
 
-// The result of attempting a spell cast: accepted, or refused with the engine's
-// human-readable reason (e.g. "No spell slots of level 1 available", "Aria
-// cannot cast Fireball: action already used this turn"). The controller surfaces
-// the reason as red floating text above the caster.
-export interface CastOutcome {
+// Per-option parameters for a bonus-action commit: a creature target and/or a
+// metered amount (e.g. the HP a Paladin spends on Lay on Hands).
+export type BonusOptionParams = { readonly targetId?: string; readonly amount?: number };
+
+// The result of attempting a committing action (a spell cast or a bonus-action
+// option): accepted, or refused with the engine's human-readable reason (e.g.
+// "No spell slots of level 1 available"). The controller surfaces the reason as
+// red floating text above the actor.
+export interface CommitOutcome {
   readonly ok: boolean;
   readonly reason?: string;
 }
 
-const castRejectionReason = (error: unknown): string =>
-  error instanceof Error && error.message ? error.message : 'Cast failed';
+const rejectionReason = (error: unknown): string =>
+  error instanceof Error && error.message ? error.message : 'That action failed';
 
 // The self-targeted action-economy actions the Actions menu offers (move and
 // attack have their own command-bar buttons).
@@ -186,11 +190,11 @@ export class DuelSession {
   // route through the dice source (manual or app). Casting is a committing
   // action, so it locks undo. A cast can fail (concentration / economy / edge
   // cases) even past target validation; on failure it aborts cleanly.
-  async commitSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<CastOutcome> {
+  async commitSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<CommitOutcome> {
     if (this.phase() !== 'player') return { ok: false };
     this.busy = true;
     this.notify();
-    let outcome: CastOutcome = { ok: true };
+    let outcome: CommitOutcome = { ok: true };
     try {
       const result = await this.dice.resolve(() =>
         this.engine.plan.castSpell(this.store.currentTail.state, {
@@ -208,35 +212,41 @@ export class DuelSession {
     } catch (error) {
       // Cast refused (no slot, action already used, concentration, edge cases);
       // report the reason so the controller can surface it above the caster.
-      outcome = { ok: false, reason: castRejectionReason(error) };
+      outcome = { ok: false, reason: rejectionReason(error) };
     }
     this.busy = false;
     this.notify();
     return outcome;
   }
 
-  // Perform an enumerated bonus-action option via the engine dispatcher.
-  async commitOption(optionId: string, targetId?: string): Promise<void> {
-    if (this.phase() !== 'player') return;
+  // Perform an enumerated bonus-action option via the engine dispatcher. Some
+  // options take a creature target (e.g. Lay on Hands) and/or a metered amount
+  // (the heal pool spent); pass them through `params`. On rejection it returns
+  // the engine's reason so the controller can surface it above the combatant.
+  async commitOption(optionId: string, params: BonusOptionParams = {}): Promise<CommitOutcome> {
+    if (this.phase() !== 'player') return { ok: false };
     this.busy = true;
     this.notify();
+    let outcome: CommitOutcome = { ok: true };
     try {
       const result = await this.dice.resolve(() =>
         this.engine.plan.useOption(this.store.currentTail.state, {
           combatantId: this.playerId,
           optionId,
-          ...(targetId ? { targetId } : {}),
+          ...(params.targetId ? { targetId: params.targetId } : {}),
+          ...(params.amount !== undefined ? { amount: params.amount } : {}),
         }),
       );
       this.store.append(result.events);
       await playToTail(this.store);
       this.diceRolledThisTurn = true;
       this.undoStack = [];
-    } catch {
-      // Option rejected; no-op.
+    } catch (error) {
+      outcome = { ok: false, reason: rejectionReason(error) };
     }
     this.busy = false;
     this.notify();
+    return outcome;
   }
 
   // Dash / Disengage / Dodge: self-targeted, dice-free, so undoable like a
