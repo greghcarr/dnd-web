@@ -1,5 +1,6 @@
-import type { Engine, Campaign } from 'dnd-srd-engine';
+import { hasLineOfSight, type Engine, type Campaign, type CampaignState, type Door } from 'dnd-srd-engine';
 import type { EngineBridge } from '@/engine/engine-bridge';
+import { cellOf } from '@/spatial/engine-positions';
 import { LiveStore } from '@/engine/live-store';
 import { buildScrubbed, createScrubCache } from '@/engine/scrub-cache';
 import { DEFAULT_MODE, DEFAULT_VS } from '@/constants/app';
@@ -185,9 +186,32 @@ export class DuelSession {
 
   // The legal targets for a creature-target bonus option (e.g. Lay on Hands:
   // self + creatures in reach), honoring the option's own range/validity rules.
+  // The engine leaves line of sight to the consumer (positions are viewer
+  // scope), so we drop targets the player can't see through cover/walls.
   bonusActionTargets(optionId: string): readonly BonusActionTarget[] {
     if (this.activeId() !== this.playerId) return [];
-    return this.engine.query.bonusActionTargets(this.store.currentTail.state, this.encounterId, this.playerId, optionId);
+    const state = this.store.currentTail.state;
+    const candidates = this.engine.query.bonusActionTargets(state, this.encounterId, this.playerId, optionId);
+    return this.visibleTargets(state, candidates);
+  }
+
+  // Drop bonus-action targets without line of sight from the player, using the
+  // engine's own hasLineOfSight (cell coords). Self and positionless targets
+  // are always kept. A no-op when there's no map or the player has no position.
+  private visibleTargets(state: CampaignState, candidates: readonly BonusActionTarget[]): readonly BonusActionTarget[] {
+    const locationId = state.characterLocations[this.playerId];
+    const location = locationId !== undefined ? state.locations[locationId] : undefined;
+    const map = location?.map;
+    const selfPos = state.encounters[this.encounterId]?.combatants.find((c) => c.combatantId === this.playerId)?.position;
+    if (!map || !selfPos) return candidates;
+    const doors = (location?.doorIds ?? []).map((id) => state.doors[id]).filter((d): d is Door => d !== undefined);
+    const self = cellOf(selfPos, map.cellSizeFeet);
+    const from = { x: self.col, y: self.row };
+    return candidates.filter((candidate) => {
+      if (candidate.combatantId === this.playerId || !candidate.position) return true;
+      const cell = cellOf(candidate.position, map.cellSizeFeet);
+      return hasLineOfSight(map, doors, from, { x: cell.col, y: cell.row });
+    });
   }
 
   spellName(spellId: string): string {
