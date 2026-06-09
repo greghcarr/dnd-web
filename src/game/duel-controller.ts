@@ -8,6 +8,7 @@ import type {
 import type { ArenaInteraction, CellMark } from '@/phaser/interaction';
 import { mountCommandBar, type CommandBar } from '@/ui/command-bar/command-bar';
 import { mountOptionMenu, type OptionMenu, type MenuOption } from '@/ui/command-bar/option-menu';
+import { mountAmountPrompt, type AmountPrompt } from '@/ui/amount-prompt';
 import { mountEndScreen, type EndScreen } from '@/ui/end-screen';
 import { mountConfirmDialog, type ConfirmDialog } from '@/ui/confirm-dialog';
 import { cellOf } from '@/spatial/engine-positions';
@@ -31,7 +32,8 @@ const ATTACK_ACTION_ID = 'attack';
 type Pending =
   | { readonly kind: 'move' }
   | { readonly kind: 'attack' }
-  | { readonly kind: 'spell'; readonly spellId: string; readonly slotLevel: number; readonly targeting: LegalSpellTargets };
+  | { readonly kind: 'spell'; readonly spellId: string; readonly slotLevel: number; readonly targeting: LegalSpellTargets }
+  | { readonly kind: 'bonus'; readonly optionId: string };
 
 // Ties the live duel together: the command bar (DOM) issues intents, the arena
 // interaction channel shows the move/target overlay and reports cell taps, and
@@ -42,6 +44,7 @@ export class DuelController {
   private pending: Pending | null = null;
   private readonly bar: CommandBar;
   private readonly menu: OptionMenu;
+  private readonly amountPrompt: AmountPrompt;
   private readonly confirm: ConfirmDialog;
   private endScreen?: EndScreen;
   private readonly unsubscribeDuel: () => void;
@@ -69,6 +72,7 @@ export class DuelController {
       onQuit: () => this.confirmQuit(),
     });
     this.menu = mountOptionMenu(gameRoot);
+    this.amountPrompt = mountAmountPrompt(gameRoot);
     this.interaction.setClickHandler((col, row) => void this.onCellClick(col, row));
     this.unsubscribeDuel = this.duel.onChange(() => this.refresh());
     this.refresh();
@@ -90,6 +94,7 @@ export class DuelController {
     this.interaction.setClickHandler(undefined);
     this.interaction.clearMarks();
     this.menu.unmount();
+    this.amountPrompt.unmount();
     this.confirm.unmount();
     this.endScreen?.unmount();
     this.bar.unmount();
@@ -173,19 +178,47 @@ export class DuelController {
         this.chooseSpell(id.slice(SPELL_OPTION_PREFIX.length));
         return;
       }
-      void this.useBonusOption(id);
+      this.useBonusOption(id);
     });
   }
 
-  private async useBonusOption(optionId: string): Promise<void> {
+  private useBonusOption(optionId: string): void {
     const option = this.duel.bonusActions().find((o) => o.id === optionId);
     if (!option) return;
-    // 1v1: a creature-target bonus action targets the lone opponent.
-    const targetId = option.target === 'creature' ? this.duel.enemyId : undefined;
-    const outcome = await this.duel.commitOption(optionId, { targetId });
-    if (!outcome.ok && outcome.reason) {
-      this.interaction.emitNotice({ subjectId: this.duel.playerId, label: outcome.reason, tone: 'error' });
+    // Creature-target options (Lay on Hands, Bardic Inspiration, ...) park in
+    // target selection so the player taps who to affect; self / no-target
+    // options commit straight away.
+    if (option.target === 'creature') {
+      if (this.duel.bonusActionTargets(optionId).length === 0) {
+        this.notice(`No target in range for ${option.label}`);
+        return;
+      }
+      this.pending = { kind: 'bonus', optionId };
+      this.syncMarks();
+      this.refresh();
+      return;
     }
+    void this.commitBonus(optionId, undefined);
+  }
+
+  // Resolve a bonus-action commit: prompt for a metered amount when the option
+  // needs one (e.g. the HP a Paladin spends on Lay on Hands), then commit,
+  // surfacing any refusal in red above the player.
+  private async commitBonus(optionId: string, targetId: string | undefined): Promise<void> {
+    const option = this.duel.bonusActions().find((o) => o.id === optionId);
+    if (!option) return;
+    let amount: number | undefined;
+    if (option.requiresAmount) {
+      amount = await this.amountPrompt.ask(option.label, option.maxAmount ?? 1);
+      if (amount === undefined) return; // cancelled
+    }
+    const outcome = await this.duel.commitOption(optionId, { targetId, amount });
+    if (!outcome.ok && outcome.reason) this.notice(outcome.reason);
+  }
+
+  // Pop a red error notice above the player.
+  private notice(label: string): void {
+    this.interaction.emitNotice({ subjectId: this.duel.playerId, label, tone: 'error' });
   }
 
   // Pick a spell: cast self-targeted spells immediately; otherwise park in
@@ -245,6 +278,10 @@ export class DuelController {
       this.interaction.setMarks(this.targetMarks(this.duel.attackTargets()));
       return;
     }
+    if (this.pending.kind === 'bonus') {
+      this.interaction.setMarks(this.targetMarks(this.duel.bonusActionTargets(this.pending.optionId)));
+      return;
+    }
     const targeting = this.pending.targeting;
     if (targeting.kind === 'creatures') {
       this.interaction.setMarks(this.targetMarks(targeting.candidates));
@@ -289,6 +326,14 @@ export class DuelController {
       await this.duel.commitAttack(target.combatantId);
       return;
     }
+    if (this.pending.kind === 'bonus') {
+      const target = this.duel.bonusActionTargets(this.pending.optionId).find((t) => t.position && at(t.position));
+      if (!target) return;
+      const optionId = this.pending.optionId;
+      this.clearSelection();
+      await this.commitBonus(optionId, target.combatantId);
+      return;
+    }
     // Spell targeting.
     const { spellId, slotLevel, targeting } = this.pending;
     if (targeting.kind === 'creatures') {
@@ -308,9 +353,7 @@ export class DuelController {
   // concentration, etc.), pop the reason as red floating text above the player.
   private async castSpell(spellId: string, slotLevel: number, target: SpellTarget): Promise<void> {
     const outcome = await this.duel.commitSpell(spellId, slotLevel, target);
-    if (!outcome.ok && outcome.reason) {
-      this.interaction.emitNotice({ subjectId: this.duel.playerId, label: outcome.reason, tone: 'error' });
-    }
+    if (!outcome.ok && outcome.reason) this.notice(outcome.reason);
   }
 
   private refresh(): void {

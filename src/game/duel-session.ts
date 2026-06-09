@@ -26,6 +26,7 @@ type Position = MoveDestination['position'];
 export type CastableSpell = ReturnType<Engine['query']['castableSpells']>[number];
 export type LegalSpellTargets = ReturnType<Engine['query']['legalSpellTargets']>;
 export type BonusActionOption = ReturnType<Engine['query']['bonusActions']>[number];
+export type BonusActionTarget = ReturnType<Engine['query']['bonusActionTargets']>[number];
 export type SpellTarget = { readonly targetIds?: readonly string[]; readonly targetPosition?: Position };
 
 // Per-option parameters for a bonus-action commit: a creature target and/or a
@@ -180,6 +181,13 @@ export class DuelSession {
   bonusActions(): readonly BonusActionOption[] {
     if (this.activeId() !== this.playerId) return [];
     return this.engine.query.bonusActions(this.store.currentTail.state, this.encounterId, this.playerId);
+  }
+
+  // The legal targets for a creature-target bonus option (e.g. Lay on Hands:
+  // self + creatures in reach), honoring the option's own range/validity rules.
+  bonusActionTargets(optionId: string): readonly BonusActionTarget[] {
+    if (this.activeId() !== this.playerId) return [];
+    return this.engine.query.bonusActionTargets(this.store.currentTail.state, this.encounterId, this.playerId, optionId);
   }
 
   spellName(spellId: string): string {
