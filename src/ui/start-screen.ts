@@ -14,6 +14,11 @@ import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL, DAILY_LEVEL, ENGINE_SRD_COMPLETE_L
 const MAX_FREE_SEED = 1_000_000_000;
 const randomSeed = (): number => Math.floor(Math.random() * MAX_FREE_SEED);
 
+// Trailing mark on each level option: a check for levels the engine guarantees
+// SRD-complete, an exclamation for levels above that (where play is unverified).
+const SRD_COMPLETE_MARK = '✓';
+const SRD_INCOMPLETE_MARK = '❗';
+
 export interface StartScreen {
   unmount(): void;
 }
@@ -95,7 +100,8 @@ export const mountStartScreen = (
   for (let level = LEVEL_MIN; level <= LEVEL_MAX; level += 1) {
     const option = document.createElement('option');
     option.value = String(level);
-    option.textContent = `Level ${level}`;
+    const mark = level <= ENGINE_SRD_COMPLETE_LEVEL ? SRD_COMPLETE_MARK : SRD_INCOMPLETE_MARK;
+    option.textContent = `Level ${level} ${mark}`;
     levelSelect.appendChild(option);
   }
 
