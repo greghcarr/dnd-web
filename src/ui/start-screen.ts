@@ -95,7 +95,11 @@ export const mountStartScreen = (
     levelSelect.appendChild(option);
   }
 
-  levelSelect.value = String(DEFAULT_LEVEL);
+  // Default the form to today's daily class + level (a familiar starting point)
+  // but with a fresh random seed, so a default Begin is a daily-like free duel
+  // rather than a replay of the fixed daily seed.
+  classSelect.value = dailyClass();
+  levelSelect.value = String(DAILY_LEVEL);
   seedInput.value = String(randomSeed());
   manualCheck.checked = getBoolSetting(SettingKey.ManualDice);
   select('.start-daily-desc').textContent = dailyHero;
