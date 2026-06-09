@@ -40,3 +40,7 @@ Bump on meaningful user-visible changes, not on every change.
 ## Engine version coupling
 
 Because dnd-web aliases to the engine source, an engine change is reflected immediately on the next dev reload or build. When the engine introduces a new event type, the narrator falls back to a humanized label automatically (no code change needed to avoid breakage), but adding a first-class sentence for it is a follow-up in `src/narrator/table.ts`.
+
+### SRD-complete level
+
+`ENGINE_SRD_COMPLETE_LEVEL` in [src/constants/app.ts](src/constants/app.ts) is the level through which the engine fully wires SRD class features (currently **7**). It drives the "increasingly unexpected results above level X" caveat under the duel menu's level selector. Its source of truth is the sibling engine's [docs/status.md](../dnd-srd-engine/docs/status.md) ("class-feature matrix fully wired through L7", CI-guarded `srd-l{1..7}-complete` floor). **Re-check it at every release / engine bump** and raise it as the engine extends its higher-level coverage.

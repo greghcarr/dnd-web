@@ -1,7 +1,7 @@
 import type { RunConfig } from '@/game/run-config';
 import { dailySeed, dailyClass } from '@/game/daily';
 import { getBoolSetting, setBoolSetting, SettingKey } from '@/settings/settings';
-import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL, DAILY_LEVEL } from '@/constants/app';
+import { LEVEL_MIN, LEVEL_MAX, DEFAULT_LEVEL, DAILY_LEVEL, ENGINE_SRD_COMPLETE_LEVEL } from '@/constants/app';
 
 // Pre-duel menu: one unified Tactical Duel form. The player picks class /
 // level / seed / dice, or ticks "Daily challenge" to snap those to today's
@@ -46,7 +46,10 @@ export const mountStartScreen = (
       <h1 class="start-title">Tactical Duel</h1>
       <label class="start-field">Name <input type="text" class="start-name-input" maxlength="20" placeholder="Aria" /></label>
       <label class="start-field">Class <select class="start-select start-class-select"></select></label>
-      <label class="start-field">Level <select class="start-select start-level-select"></select></label>
+      <div class="start-level-group">
+        <label class="start-field">Level <select class="start-select start-level-select"></select></label>
+        <p class="start-level-warning"></p>
+      </div>
       <div class="start-seed">
         <label>Seed <input type="number" class="start-seed-input" min="0" step="1" /></label>
         <button type="button" class="start-reroll" aria-label="Random seed" title="Random seed">⟳</button>
@@ -103,6 +106,10 @@ export const mountStartScreen = (
   seedInput.value = String(randomSeed());
   manualCheck.checked = getBoolSetting(SettingKey.ManualDice);
   select('.start-daily-desc').textContent = dailyHero;
+  // Caveat: the engine only fully implements SRD class features through
+  // ENGINE_SRD_COMPLETE_LEVEL; above it, play gets increasingly unexpected.
+  select('.start-level-warning').textContent =
+    `This game will display increasingly unexpected results above level ${ENGINE_SRD_COMPLETE_LEVEL}. It is not recommended to play at these levels.`;
 
   // Rows that lock (disabled + dimmed) while the daily tick is on.
   const lockRows: HTMLElement[] = [

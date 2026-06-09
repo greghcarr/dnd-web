@@ -784,6 +784,18 @@ body {
   font-size: 0.82rem;
   color: var(--text-dim);
 }
+/* Level row + its caveat, grouped so the warning tucks under the selector. */
+.start-level-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.start-level-warning {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: #ffd84d;
+}
 .start-select,
 .start-name-input {
   flex: 1 1 auto;

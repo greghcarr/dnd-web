@@ -47,13 +47,21 @@ export const TACTICAL_DEFAULT_SEED = 123;
 export const DEFAULT_LEVEL = 1;
 export const LEVEL_MIN = 1;
 // The engine builds correct level/HP/proficiency/spell slots for all of
-// 1-20. Characters above ~L6 are correctly leveled but under-featured
-// (higher-level feature content is still being modeled in the pack); the
-// engine's runBattle throws loudly if a future choice can't be auto-resolved
-// rather than silently shipping an under-leveled character.
+// 1-20. Characters above ENGINE_SRD_COMPLETE_LEVEL are correctly leveled but
+// under-featured (higher-level feature content is still being modeled in the
+// pack); the engine's runBattle throws loudly if a future choice can't be
+// auto-resolved rather than silently shipping an under-leveled character.
 export const LEVEL_MAX = 20;
 // The daily challenge is always this level (a fixed, shared higher-level duel).
 export const DAILY_LEVEL = 5;
+// The level through which the engine fully implements SRD class features: the
+// engine's CI-guarded "srd-l{1..7}-complete" floor (sibling engine's
+// docs/status.md: "the class-feature matrix is fully wired through L7"). Above
+// this, higher-level features are only partially wired (narrative-only where
+// the primitive vocabulary doesn't yet cover them), so play gets increasingly
+// unexpected; the duel menu warns past this level. KEEP IN SYNC with the engine
+// as its coverage grows — re-check at every release.
+export const ENGINE_SRD_COMPLETE_LEVEL = 7;
 
 export const DEFAULT_MODE: FuzzMode = '1v1';
 export const DEFAULT_VS: FuzzVsKind = 'pc';
