@@ -5,7 +5,7 @@
 // Ported from the engine demo, adapted to subscribe to the ReplayStore.
 
 import type { Event } from 'dnd-srd-engine';
-import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
+import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
 import { collapseToggleHtml, makeCollapsible } from '@/ui/collapsible';
 import { createEventRow } from './event-row';
@@ -17,7 +17,7 @@ export interface EventInspector {
   readonly unmount: () => void;
 }
 
-export const mountEventInspector = (root: HTMLElement, store: ReplayStore): EventInspector => {
+export const mountEventInspector = (root: HTMLElement, store: SnapshotSource): EventInspector => {
   root.innerHTML = `
     <div class="panel-header">${collapseToggleHtml('Event log')}<span class="inspector-meta"></span></div>
     <div class="panel-scroll inspector-scroll">

@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
-import type { LocationMap } from 'dnd-srd-engine';
-import type { ReplayStore, ReplaySnapshot } from '@/engine/replay-store';
+import { computeSpellSlots, type Character, type LocationMap, type ResolvedContent } from 'dnd-srd-engine';
+import type { SnapshotSource, ReplaySnapshot } from '@/engine/snapshot-source';
 import type { Session } from '@/state/session';
-import type { FormationBounds } from '@/spatial/formation';
+import type { FuzzBattleResult } from '@engine-fuzz';
+import type { FormationBounds, Team } from '@/spatial/formation';
 import { combatantPositions, cellOf } from '@/spatial/engine-positions';
-import { TokenView } from '@/phaser/tokens/TokenView';
+import { TokenView, type TokenBadge } from '@/phaser/tokens/TokenView';
 import { registerCharacterAnims } from '@/phaser/anims';
 import { frameBounds } from '@/phaser/camera';
+import { fitGameToParent } from '@/phaser/render-scale';
+import { floatingEventEntries } from '@/phaser/floating-events';
 import {
   spriteKeyFor,
   GROUND_KEY,
@@ -24,14 +27,48 @@ import {
   SHOW_GRID,
 } from '@/constants/layout';
 import { RENDER_DEPTH } from '@/constants/depths';
-import { GROUND_BASE_COLOR, GRID_LINE_COLOR, GRID_LINE_ALPHA } from '@/constants/colors';
+import {
+  GROUND_BASE_COLOR,
+  GRID_LINE_COLOR,
+  GRID_LINE_ALPHA,
+  CLASS_COLORS,
+  CLASS_NAME_OUTLINE_COLORS,
+  TEAM_A_COLOR,
+  TEAM_B_COLOR,
+  cssHex,
+} from '@/constants/colors';
 import { makeRng, type Rng } from '@/phaser/rng';
+import type { ArenaInteraction } from '@/phaser/interaction';
+import {
+  MOVE_CELL_COLOR,
+  MOVE_CELL_ALPHA,
+  MOVE_CELL_BORDER_COLOR,
+  TARGET_CELL_COLOR,
+  TARGET_CELL_ALPHA,
+  TARGET_CELL_BORDER_COLOR,
+  OVERLAY_BORDER_PX,
+  OVERLAY_BORDER_ALPHA,
+} from '@/constants/overlay';
 
 const FENCE_WOOD_DARK = 0x5b3b1f;
 const FENCE_WOOD_MED = 0x7a5230;
 const FENCE_WOOD_LIGHT = 0x9c6b3e;
 const PROP_OFFSET_X = GRID_TILE_PX * 0.5;
 const PROP_OFFSET_Y = GRID_TILE_PX * 0.3;
+// An occluding prop fades to this alpha while a character stands behind it, so
+// the character isn't hidden.
+const OCCLUDER_FADE_ALPHA = 0.4;
+
+// A prop that can hide a combatant standing behind it: trees, bushes, boulders,
+// and decorative stones. `tall` props (trees, boulders) are impassable cover
+// drawn over the cell to their north, so a combatant one row up is occluded;
+// short props (brush, decor) cover their own cell, where a combatant stands.
+interface Occluder {
+  readonly image: Phaser.GameObjects.Image;
+  readonly col: number;
+  readonly row: number;
+  readonly tall: boolean;
+}
 
 // Tactical-arena terrain rendering, seed-deterministic for variety:
 // impassable cover blocks sight/movement (tall trees, varied), difficult
@@ -67,14 +104,33 @@ const expand = (bounds: FormationBounds, by: number): FormationBounds => ({
 // and one token per combatant, kept in sync with engine state at the
 // replay cursor. Rebuilds when the session changes.
 export class ArenaScene extends Phaser.Scene {
-  private store!: ReplayStore;
+  private store!: SnapshotSource;
   private readonly tokens = new Map<string, TokenView>();
   private scenery: Phaser.GameObjects.GameObject[] = [];
+  // Props that fade when a combatant stands behind them (see setStates).
+  private occluders: Occluder[] = [];
   private currentSession?: Session;
   private fenceBounds?: FormationBounds;
   private prevCursor = 0;
   private lastSnapshot?: ReplaySnapshot;
   private unsubscribe?: () => void;
+  // Interactive-duel cell overlay + tap input (absent in replay modes).
+  private interaction?: ArenaInteraction;
+  private overlay?: Phaser.GameObjects.Graphics;
+  private interactionUnsub?: () => void;
+  private noticeUnsub?: () => void;
+  private resizeObserver?: ResizeObserver;
+  private reframeQueued = false;
+  // Tap-to-inspect tooltip: a DOM card showing a combatant's stats, toggled by
+  // tapping it (next tap anywhere dismisses). `tooltipId` is the combatant it's
+  // currently showing, so a state change can refresh the open card.
+  private tooltip?: HTMLElement;
+  private tooltipId?: string;
+  // Interactive-duel turn banner: large DOM text near the top announcing whose
+  // turn it is. `turnBannerActiveId` is the combatant it currently names, so the
+  // banner only re-renders (and re-animates) when the active combatant changes.
+  private turnBanner?: HTMLElement;
+  private turnBannerActiveId?: string;
 
   constructor() {
     super('Arena');
@@ -83,11 +139,59 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(GROUND_BASE_COLOR);
     registerCharacterAnims(this);
-    this.store = this.registry.get('store') as ReplayStore;
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.reframe, this);
+    this.store = this.registry.get('store') as SnapshotSource;
+    this.createTooltip();
+    this.createTurnBanner();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
+    // Size the device-resolution buffer to the parent now (covers the initial
+    // layout before the first window/observer event).
+    fitGameToParent(this.game);
+    // The game runs in Scale.NONE, so nothing auto-tracks the parent's size.
+    // A CSS-driven arena resize (collapsing the right column) or a mobile
+    // viewport change (iOS Safari toolbar show/hide, rotation) must refit the
+    // buffer and re-center. Observe the canvas parent directly, refit to the
+    // new size, then reframe on the next frame (once canvas + camera settle).
+    const arenaParent = this.game.canvas.parentElement;
+    if (arenaParent && typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => {
+        fitGameToParent(this.game);
+        this.scheduleReframe();
+      });
+      this.resizeObserver.observe(arenaParent);
+    }
+    // The interaction channel is present only when a live duel is active; the
+    // overlay graphics and tap handler are inert (no marks, no handler) in
+    // replay modes.
+    this.interaction = this.registry.get('interaction') as ArenaInteraction | undefined;
+    if (this.interaction) {
+      this.overlay = this.add.graphics().setDepth(RENDER_DEPTH.OVERLAY);
+      // Redraw the overlay and re-fit the camera so revealed cells (e.g. the
+      // Move squares) all come into view, snapping back when they clear.
+      // Entering a target selection also dismisses any open inspect tooltip.
+      this.interactionUnsub = this.interaction.onChange(() => {
+        this.drawOverlay();
+        this.frameForMarks(true);
+        if (this.interaction!.getMarks().length > 0) this.clearTooltip();
+      });
+      // Floating notices the controller pushes (e.g. a refused spell cast) pop
+      // above the named combatant, red for errors.
+      this.noticeUnsub = this.interaction.onNotice((notice) => {
+        this.tokens.get(notice.subjectId)?.addFloatingText([{ text: notice.label }], notice.tone);
+      });
+      this.drawOverlay();
+    }
+    // Always handle taps: tap a character to toggle its info tooltip; in a
+    // live duel a tap during target selection picks the cell instead.
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
-      this.scale.off(Phaser.Scale.Events.RESIZE, this.reframe, this);
+      this.interactionUnsub?.();
+      this.noticeUnsub?.();
+      this.resizeObserver?.disconnect();
+      this.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.scheduleReframe, this);
+      this.tooltip?.remove();
+      this.turnBanner?.remove();
     });
     this.unsubscribe = this.store.subscribe((snapshot) => this.onSnapshot(snapshot));
   }
@@ -96,10 +200,13 @@ export class ArenaScene extends Phaser.Scene {
     this.lastSnapshot = snapshot;
     if (snapshot.session !== this.currentSession) {
       this.currentSession = snapshot.session;
+      this.clearTooltip(); // the previously hovered token is gone
+      this.turnBannerActiveId = undefined; // force a fresh banner for the new battle
       this.buildForSession(snapshot.session);
       this.prevCursor = snapshot.cursor;
       this.setStates(snapshot, false);
       this.frameCamera(false);
+      this.updateTurnBanner(snapshot);
       return;
     }
     const delta = snapshot.cursor - this.prevCursor;
@@ -110,6 +217,8 @@ export class ArenaScene extends Phaser.Scene {
     this.setStates(snapshot, animate);
     if (animate) this.reactToEvent(snapshot);
     this.frameCamera(animate);
+    this.refreshTooltip(); // keep an open tooltip's HP/slots current
+    this.updateTurnBanner(snapshot);
   }
 
   private buildForSession(session: Session): void {
@@ -117,6 +226,7 @@ export class ArenaScene extends Phaser.Scene {
     this.tokens.clear();
     for (const object of this.scenery) object.destroy();
     this.scenery = [];
+    this.occluders = [];
 
     if (session.map) {
       this.buildTacticalArena(session, session.map);
@@ -208,6 +318,8 @@ export class ArenaScene extends Phaser.Scene {
         if (rng() < 0.5) prop.setFlipX(true);
         prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
         this.scenery.push(prop);
+        // Positionless scatter: trees are tall cover, everything else low.
+        this.registerOccluder(prop, col, row, spec.key.startsWith('tree'));
       }
     }
   }
@@ -223,17 +335,22 @@ export class ArenaScene extends Phaser.Scene {
         const terrain = map.terrain[row]?.[col];
         if (terrain === 'impassable') {
           if (border.has(`${col},${row}`)) {
+            // Boulders: impassable cover, so they hide a combatant to the north.
             this.placeProp(pick(BORDER_ROCK_KEYS, rng), col, row, {
               flip: rng() < 0.5,
               scale: BORDER_ROCK_SCALE_MIN + rng() * (BORDER_ROCK_SCALE_MAX - BORDER_ROCK_SCALE_MIN),
+              tall: true,
             });
           } else {
+            // Trees: tall cover, hide a combatant to the north.
             this.placeProp(pick(COVER_PROP_KEYS, rng), col, row, {
               flip: rng() < 0.5,
               scale: COVER_SCALE_MIN + rng() * (COVER_SCALE_MAX - COVER_SCALE_MIN),
+              tall: true,
             });
           }
         } else if (terrain === 'difficult') {
+          // Brush: low, a combatant stands in it (same cell).
           this.placeProp(pick(BRUSH_PROP_KEYS, rng), col, row, { flip: rng() < 0.5 });
         } else if (terrain === 'water') {
           this.tintCell(col, row, WATER_TINT_COLOR, WATER_TINT_ALPHA);
@@ -301,7 +418,7 @@ export class ArenaScene extends Phaser.Scene {
     key: string,
     col: number,
     row: number,
-    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number } = {},
+    opts: { flip?: boolean; scale?: number; offsetX?: number; offsetY?: number; tall?: boolean } = {},
   ): void {
     const spec = PROP_SPECS.find((s) => s.key === key);
     if (!spec) return;
@@ -312,6 +429,13 @@ export class ArenaScene extends Phaser.Scene {
     if (opts.flip) prop.setFlipX(true);
     prop.setDepth(RENDER_DEPTH.WORLD_BASE + y);
     this.scenery.push(prop);
+    this.registerOccluder(prop, col, row, opts.tall ?? false);
+  }
+
+  // Track a prop so it can fade when a combatant stands behind it. `tall`
+  // (impassable cover) covers the cell to its north; otherwise its own cell.
+  private registerOccluder(image: Phaser.GameObjects.Image, col: number, row: number, tall: boolean): void {
+    this.occluders.push({ image, col, row, tall });
   }
 
   private tintCell(col: number, row: number, color: number, alpha: number): void {
@@ -359,15 +483,28 @@ export class ArenaScene extends Phaser.Scene {
       const character = state.characters[id];
       const kind: CharacterKind = character?.kind ?? 'pc';
       const index = kind === 'creature' ? creatureIndex++ : humanIndex++;
-      const token = new TokenView(this, placement, spriteKeyFor(kind, index), character?.name ?? id);
+      const token = new TokenView(
+        this,
+        placement,
+        spriteKeyFor(kind, index),
+        character?.name ?? id,
+        nameOutlineColor(character, placement.team),
+        badgeFor(id, session.playerId),
+      );
       this.tokens.set(id, token);
     }
   }
 
+  // The combatant whose turn it is at the current cursor, or undefined before
+  // the encounter has an active combatant.
+  private activeCombatantId(snapshot: ReplaySnapshot): string | undefined {
+    const encounter = snapshot.campaign.state.encounters[snapshot.session.encounterId];
+    return encounter?.combatants[encounter.activeIndex]?.combatantId;
+  }
+
   private setStates(snapshot: ReplaySnapshot, animateMoves: boolean): void {
     const { campaign, session } = snapshot;
-    const encounter = campaign.state.encounters[session.encounterId];
-    const activeId = encounter?.combatants[encounter.activeIndex]?.combatantId;
+    const activeId = this.activeCombatantId(snapshot);
     for (const [id, token] of this.tokens) {
       token.setState(campaign.state.characters[id], id === activeId);
     }
@@ -375,30 +512,266 @@ export class ArenaScene extends Phaser.Scene {
     // no-ops when the tile is unchanged, so only real moves animate/snap.
     if (!session.map) return;
     const cellSize = session.map.cellSizeFeet;
+    const occupied = new Set<string>();
     for (const combatant of combatantPositions(campaign, session.encounterId)) {
       if (!combatant.position) continue;
+      const { col, row } = cellOf(combatant.position, cellSize);
+      occupied.add(`${col},${row}`);
       const token = this.tokens.get(combatant.combatantId);
       if (!token) continue;
-      const { col, row } = cellOf(combatant.position, cellSize);
       token.moveTo(col, row, animateMoves);
+    }
+    this.updateOccluders(occupied);
+  }
+
+  // Fade an occluding prop to OCCLUDER_FADE_ALPHA while a combatant stands
+  // behind it: a tall prop (tree/boulder) covers the cell to its north (so the
+  // combatant is one row up); a short prop (brush/decor) covers its own cell.
+  // Otherwise it shows fully.
+  private updateOccluders(occupied: ReadonlySet<string>): void {
+    for (const occluder of this.occluders) {
+      const behind = occluder.tall
+        ? occupied.has(`${occluder.col},${occluder.row - 1}`)
+        : occupied.has(`${occluder.col},${occluder.row}`);
+      occluder.image.setAlpha(behind ? OCCLUDER_FADE_ALPHA : 1);
     }
   }
 
-  // The single event just crossed by a forward step drives a reaction:
-  // the attacker lunges, or the damaged combatant flashes.
+  // The single event just crossed by a forward step drives a reaction: the
+  // attacker turns to face its target and lunges, a caster turns to face its
+  // target, or the damaged combatant flashes.
   private reactToEvent(snapshot: ReplaySnapshot): void {
     const event = snapshot.session.fullCampaign.events[snapshot.cursor - 1];
     if (!event) return;
     if (event.type === 'AttackRolled') {
+      this.faceTokenToward(event.attackerId, event.targetId);
       this.tokens.get(event.attackerId)?.playAttack();
+    } else if (event.type === 'SpellCastDeclared') {
+      this.faceTokenToward(event.characterId, event.targetIds[0]);
     } else if (event.type === 'DamageApplied') {
       this.tokens.get(event.targetId)?.flashHit();
     }
+    // Pop floating "combat text" above the affected combatant(s) for the event.
+    for (const entry of floatingEventEntries(event, snapshot.campaign.state, snapshot.session.content)) {
+      this.tokens.get(entry.subjectId)?.addFloatingText(entry.segments);
+    }
+  }
+
+  // Turn one combatant's token to face another (an attack or spell target), so
+  // the avatar looks at who it acts on. No-op if either token is absent or the
+  // target is the actor itself (e.g. a self-targeted spell).
+  private faceTokenToward(actorId: string, targetId: string | undefined): void {
+    if (targetId === undefined || targetId === actorId) return;
+    const actor = this.tokens.get(actorId);
+    const target = this.tokens.get(targetId);
+    if (actor && target) actor.faceToward(target.worldX);
+  }
+
+  // --- Hover tooltip (desktop): a DOM card following the pointer ---
+
+  private createTooltip(): void {
+    const parent = this.game.canvas.parentElement ?? document.body;
+    const el = document.createElement('div');
+    el.className = 'char-tooltip';
+    el.hidden = true;
+    parent.appendChild(el);
+    this.tooltip = el;
+  }
+
+  // --- Turn banner (interactive duel): large text near the top naming whose
+  // turn it is, coloured by their relation to the player ---
+
+  private createTurnBanner(): void {
+    const parent = this.game.canvas.parentElement ?? document.body;
+    const el = document.createElement('div');
+    el.className = 'turn-banner';
+    el.hidden = true;
+    parent.appendChild(el);
+    this.turnBanner = el;
+  }
+
+  // Announce whose turn it is: "Your turn" (green), "(Ally) Name's turn" (blue),
+  // or "(Enemy) Name's turn" (red). Player-centric, so it stays hidden in the
+  // replay viewers (no playerId). Only re-renders when the active combatant
+  // changes, so it doesn't flicker across the several snapshots of one turn.
+  private updateTurnBanner(snapshot: ReplaySnapshot): void {
+    const banner = this.turnBanner;
+    if (!banner) return;
+    const { session } = snapshot;
+    if (session.playerId === undefined) {
+      banner.hidden = true;
+      this.turnBannerActiveId = undefined;
+      return;
+    }
+    const activeId = this.activeCombatantId(snapshot);
+    if (activeId === this.turnBannerActiveId) return;
+    this.turnBannerActiveId = activeId;
+    if (activeId === undefined) {
+      banner.hidden = true;
+      return;
+    }
+    const relation = turnRelation(session.result, session.playerId, activeId);
+    const character = snapshot.campaign.state.characters[activeId];
+    const name = character?.name ?? activeId;
+    // Tint the name in its class colour; the rest keeps the relation colour.
+    const classColor = character && character.classes.length > 0 ? CLASS_COLORS[primaryClassId(character)] : undefined;
+    const { before, after } = TURN_BANNER_LABELS[relation];
+    const nameEl = document.createElement('span');
+    nameEl.textContent = name;
+    if (classColor !== undefined) nameEl.style.color = cssHex(classColor);
+    banner.className = `turn-banner turn-${relation}`;
+    banner.replaceChildren(document.createTextNode(before), nameEl, document.createTextNode(after));
+    banner.hidden = false;
+    this.restartBannerAnimation(banner);
+  }
+
+  // Replay the CSS entrance animation on each turn change (it otherwise only
+  // runs once, when the element is first added). The reflow read forces the
+  // browser to apply the cleared animation before it's restored.
+  private restartBannerAnimation(banner: HTMLElement): void {
+    banner.style.animation = 'none';
+    void banner.offsetWidth;
+    banner.style.animation = '';
+  }
+
+  private showTooltip(id: string, pointer: Phaser.Input.Pointer): void {
+    this.tooltipId = id;
+    if (this.populateTooltip(id) && this.tooltip) {
+      this.tooltip.hidden = false;
+      this.positionTooltip(pointer);
+    }
+  }
+
+  private clearTooltip(): void {
+    this.tooltipId = undefined;
+    if (this.tooltip) this.tooltip.hidden = true;
+  }
+
+  // Rebuild the open tooltip's contents (e.g. after HP/slots change); hides it
+  // if the shown combatant has gone (a new battle loaded).
+  private refreshTooltip(): void {
+    if (this.tooltipId === undefined) return;
+    if (!this.populateTooltip(this.tooltipId)) this.clearTooltip();
+  }
+
+  // The combatant whose visible token is at a world point (topmost wins), or
+  // undefined if the tap missed every token.
+  private tokenAt(worldX: number, worldY: number): string | undefined {
+    for (const [id, token] of this.tokens) {
+      if (token.hitTest(worldX, worldY)) return id;
+    }
+    return undefined;
+  }
+
+  private positionTooltip(pointer: Phaser.Input.Pointer): void {
+    if (!this.tooltip) return;
+    const event = pointer.event as MouseEvent | undefined;
+    this.tooltip.style.left = `${(event?.clientX ?? 0) + TOOLTIP_OFFSET_PX}px`;
+    this.tooltip.style.top = `${(event?.clientY ?? 0) + TOOLTIP_OFFSET_PX}px`;
+  }
+
+  // Fill the tooltip with the combatant's name, descriptor, HP, spell slots
+  // remaining, and (for casters) their spell list grouped by level, from engine
+  // state at the current cursor. textContent (not innerHTML) keeps the
+  // player-entered name injection-safe. Returns false if the combatant is gone.
+  private populateTooltip(id: string): boolean {
+    const snapshot = this.lastSnapshot;
+    if (!snapshot || !this.tooltip) return false;
+    const character = snapshot.campaign.state.characters[id];
+    if (!character) return false;
+    const content = snapshot.session.content;
+    const totalLevel = character.classes.reduce((sum, c) => sum + c.level, 0);
+    const primary = character.classes.reduce((a, b) => (b.level > a.level ? b : a));
+    const race = content.species.get(character.speciesId)?.name;
+    const subclass = primary.subclassId ? content.subclasses.get(primary.subclassId)?.name : undefined;
+    const className = content.classes.get(primary.classId)?.name ?? primary.classId;
+    const descriptor = [`Level ${totalLevel}`, race, subclass, className].filter(Boolean).join(' ');
+    const hp = `${Math.max(0, character.hp.current)}/${character.hp.max} HP`;
+    const lines = [descriptor, hp, spellSlotsLabel(character, content.classes)];
+
+    this.tooltip.replaceChildren();
+    const nameEl = document.createElement('div');
+    nameEl.className = 'tt-name';
+    nameEl.textContent = character.name;
+    this.tooltip.appendChild(nameEl);
+    for (const line of lines) {
+      const lineEl = document.createElement('div');
+      lineEl.className = 'tt-line';
+      lineEl.textContent = line;
+      this.tooltip.appendChild(lineEl);
+    }
+    // Spell list (casters only), as a titled section at the bottom.
+    const spellLines = characterSpellLines(character, content);
+    if (spellLines.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'tt-spells-title';
+      title.textContent = 'Spells';
+      this.tooltip.appendChild(title);
+      for (const line of spellLines) {
+        const spellEl = document.createElement('div');
+        spellEl.className = 'tt-spell';
+        spellEl.textContent = line;
+        this.tooltip.appendChild(spellEl);
+      }
+    }
+    return true;
+  }
+
+  // Paint the interactive-duel cell overlay: green for reachable move cells,
+  // red for legal attack targets. Redrawn whenever the controller changes the
+  // marks; empty (cleared) in replay modes and when idle.
+  private drawOverlay(): void {
+    const g = this.overlay;
+    if (!g || !this.interaction) return;
+    g.clear();
+    for (const mark of this.interaction.getMarks()) {
+      const x = mark.col * GRID_TILE_PX;
+      const y = mark.row * GRID_TILE_PX;
+      const isMove = mark.kind === 'move';
+      g.fillStyle(isMove ? MOVE_CELL_COLOR : TARGET_CELL_COLOR, isMove ? MOVE_CELL_ALPHA : TARGET_CELL_ALPHA);
+      g.fillRect(x, y, GRID_TILE_PX, GRID_TILE_PX);
+      g.lineStyle(OVERLAY_BORDER_PX, isMove ? MOVE_CELL_BORDER_COLOR : TARGET_CELL_BORDER_COLOR, OVERLAY_BORDER_ALPHA);
+      g.strokeRect(x, y, GRID_TILE_PX, GRID_TILE_PX);
+    }
+  }
+
+  // A tap (mouse or touch): during a live-duel target selection it picks the
+  // move/attack/spell cell; otherwise it toggles the inspect tooltip (any tap
+  // closes an open one; a tap on a character opens that character's).
+  private onPointerDown(pointer: Phaser.Input.Pointer): void {
+    const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    if (this.interaction && this.interaction.getMarks().length > 0) {
+      this.interaction.clickCell(Math.floor(world.x / GRID_TILE_PX), Math.floor(world.y / GRID_TILE_PX));
+      return;
+    }
+    if (this.tooltipId !== undefined) {
+      this.clearTooltip();
+      return;
+    }
+    const id = this.tokenAt(world.x, world.y);
+    if (id !== undefined) this.showTooltip(id, pointer);
+  }
+
+  // Reframe on the next animation frame, coalescing bursts of resize events.
+  // Deferring lets the canvas + camera settle at the new size first, so the
+  // fit uses the final dimensions (not a mid-transition size).
+  private scheduleReframe(): void {
+    if (this.reframeQueued) return;
+    this.reframeQueued = true;
+    requestAnimationFrame(() => {
+      this.reframeQueued = false;
+      this.reframe();
+    });
   }
 
   // Resize handler: re-fit the camera to the current state (never animated).
+  // Keeps the marked-cell framing if a selection (e.g. Move) is active.
   private reframe(): void {
-    this.frameCamera(false);
+    if (this.interaction && this.interaction.getMarks().length > 0) {
+      this.frameForMarks(false);
+    } else {
+      this.frameCamera(false);
+    }
   }
 
   private frameCamera(animate: boolean): void {
@@ -416,34 +789,153 @@ export class ArenaScene extends Phaser.Scene {
   // (so a felled combatant doesn't drag the view), falling back to the whole
   // map if none are standing.
   private frameTactical(map: LocationMap, animate: boolean): void {
+    frameBounds(this.cameras.main, this.livingCombatantBounds() ?? wholeMapBounds(map), animate);
+  }
+
+  // Bounds of the living combatants at the current cursor; undefined if none
+  // are standing (or no positioned battle is loaded).
+  private livingCombatantBounds(): FormationBounds | undefined {
     const snapshot = this.lastSnapshot;
     const session = this.currentSession;
-    if (!snapshot || !session) return;
-    const cellSize = map.cellSizeFeet;
+    if (!snapshot || !session?.map) return undefined;
+    const cellSize = session.map.cellSizeFeet;
     let bounds: FormationBounds | undefined;
     for (const combatant of combatantPositions(snapshot.campaign, session.encounterId)) {
       if (!combatant.position) continue;
       const character = snapshot.campaign.state.characters[combatant.combatantId];
       if (character && character.hp.current <= 0) continue;
       const { col, row } = cellOf(combatant.position, cellSize);
-      bounds = bounds
-        ? {
-            minCol: Math.min(bounds.minCol, col),
-            maxCol: Math.max(bounds.maxCol, col),
-            minRow: Math.min(bounds.minRow, row),
-            maxRow: Math.max(bounds.maxRow, row),
-          }
-        : { minCol: col, maxCol: col, minRow: row, maxRow: row };
+      bounds = expandBounds(bounds, col, row);
     }
-    const target = bounds ?? {
-      minCol: 0,
-      maxCol: map.widthCells - 1,
-      minRow: 0,
-      maxRow: map.heightCells - 1,
-    };
-    frameBounds(this.cameras.main, target, animate);
+    return bounds;
+  }
+
+  // When the player has cells marked (e.g. Move's reachable squares), frame
+  // the living combatants together with every marked cell so all the options
+  // are visible at once; restore the normal combatant framing when cleared.
+  private frameForMarks(animate: boolean): void {
+    if (!this.interaction || !this.currentSession?.map) return;
+    const marks = this.interaction.getMarks();
+    if (marks.length === 0) {
+      this.frameCamera(animate);
+      return;
+    }
+    let bounds = this.livingCombatantBounds();
+    for (const mark of marks) bounds = expandBounds(bounds, mark.col, mark.row);
+    if (bounds) frameBounds(this.cameras.main, bounds, animate);
   }
 }
+
+// Pointer-to-tooltip gap so the card doesn't sit under the cursor.
+const TOOLTIP_OFFSET_PX = 14;
+
+// "Spell slots remaining" line: per-level remaining/max from the engine's slot
+// progression (computeSpellSlots) minus the character's used slots, plus any
+// pact slots. "none" for non-casters.
+const spellSlotsLabel = (
+  character: Character,
+  classesById: Parameters<typeof computeSpellSlots>[1],
+): string => {
+  const { slotsByLevel, pactSlots } = computeSpellSlots(character, classesById);
+  const parts: string[] = [];
+  slotsByLevel.forEach((max, i) => {
+    if (max <= 0) return;
+    const remaining = Math.max(0, max - (character.spellSlotsUsed[String(i + 1)] ?? 0));
+    parts.push(`L${i + 1} ${remaining}/${max}`);
+  });
+  if (pactSlots) {
+    const remaining = Math.max(0, pactSlots.count - character.pactSlotsUsed);
+    parts.push(`Pact L${pactSlots.level} ${remaining}/${pactSlots.count}`);
+  }
+  return parts.length > 0 ? `Spell slots: ${parts.join(' · ')}` : 'Spell slots: none';
+};
+
+// The character's spells (union of prepared and known, so it covers both
+// prepared and known casters) grouped by level into compact lines, e.g.
+// "Cantrips: Fire Bolt, Light" / "Level 1: Mage Armor, Shield". Empty for
+// non-casters.
+const characterSpellLines = (character: Character, content: ResolvedContent): string[] => {
+  const ids = new Set<string>([...character.preparedSpells, ...character.knownSpells]);
+  if (ids.size === 0) return [];
+  const namesByLevel = new Map<number, string[]>();
+  for (const id of ids) {
+    const spell = content.spells.get(id);
+    const names = namesByLevel.get(spell?.level ?? 0) ?? [];
+    names.push(spell?.name ?? id);
+    namesByLevel.set(spell?.level ?? 0, names);
+  }
+  return [...namesByLevel.keys()]
+    .sort((a, b) => a - b)
+    .map((level) => {
+      const names = namesByLevel.get(level)!.sort((a, b) => a.localeCompare(b)).join(', ');
+      return `${level === 0 ? 'Cantrips' : `Level ${level}`}: ${names}`;
+    });
+};
+
+const wholeMapBounds = (map: LocationMap): FormationBounds => ({
+  minCol: 0,
+  maxCol: map.widthCells - 1,
+  minRow: 0,
+  maxRow: map.heightCells - 1,
+});
+
+const expandBounds = (
+  bounds: FormationBounds | undefined,
+  col: number,
+  row: number,
+): FormationBounds =>
+  bounds
+    ? {
+        minCol: Math.min(bounds.minCol, col),
+        maxCol: Math.max(bounds.maxCol, col),
+        minRow: Math.min(bounds.minRow, row),
+        maxRow: Math.max(bounds.maxRow, row),
+      }
+    : { minCol: col, maxCol: col, minRow: row, maxRow: row };
+
+// Who controls a combatant in an interactive duel: the player gets the "1P"
+// badge, everyone else "CPU". Replay viewers (no playerId) get no badge.
+const badgeFor = (id: string, playerId: string | undefined): TokenBadge | undefined => {
+  if (playerId === undefined) return undefined;
+  return id === playerId ? 'player' : 'cpu';
+};
+
+// Whose turn it is relative to the player: their own, an ally's, or an enemy's.
+// The player's team is whichever result roster contains them, so allies are the
+// rest of that roster and everyone else is an enemy.
+type TurnRelation = 'self' | 'ally' | 'enemy';
+const turnRelation = (
+  result: FuzzBattleResult,
+  playerId: string,
+  activeId: string,
+): TurnRelation => {
+  if (activeId === playerId) return 'self';
+  const playerOnTeamA = result.teamACharacterIds.includes(playerId);
+  const allies = playerOnTeamA ? result.teamACharacterIds : result.teamBCharacterIds;
+  return allies.includes(activeId) ? 'ally' : 'enemy';
+};
+
+// The turn banner's wording per relation (the active combatant's name fills the
+// ally/enemy forms).
+// The turn banner's wording per relation, split around the combatant's name so
+// the name can be tinted in its class colour while the rest keeps the relation
+// colour.
+const TURN_BANNER_LABELS: Readonly<Record<TurnRelation, { readonly before: string; readonly after: string }>> = {
+  self: { before: 'Your (', after: "'s) turn" },
+  ally: { before: '(Ally) ', after: "'s turn" },
+  enemy: { before: '(Enemy) ', after: "'s turn" },
+};
+
+// A combatant's most-advanced class (the colour-defining one for multiclass).
+const primaryClassId = (character: Character): string =>
+  character.classes.reduce((a, b) => (b.level > a.level ? b : a)).classId;
+
+// The name-label outline colour: the combatant's class colour, falling back
+// to their team colour when they have no recognised class (e.g. monsters).
+const nameOutlineColor = (character: Character | undefined, team: Team): number => {
+  const classColor = character ? CLASS_NAME_OUTLINE_COLORS[primaryClassId(character)] : undefined;
+  return classColor ?? (team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR);
+};
 
 // Expand the weighted prop specs into a flat pool for uniform draws.
 const weightedPool = (): typeof PROP_SPECS => {

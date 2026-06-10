@@ -1,6 +1,6 @@
 {
   "name": "dnd-web",
-  "version": "0.3.0-pre-alpha",
+  "version": "0.4.0-pre-alpha",
   "private": true,
   "type": "module",
   "description": "2D top-down RPG-style replay viewer for the dnd-srd-engine combat fuzz scenarios.",
@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
     "phaser": "^3.80.1"
   },
   "devDependencies": {

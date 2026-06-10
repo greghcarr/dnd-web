@@ -30,24 +30,56 @@ import {
   BLINK_DURATION_MS,
 } from '@/constants/timing';
 import {
-  TEAM_A_COLOR,
-  TEAM_B_COLOR,
   ACTIVE_RING_COLOR,
   HP_BAR_BG_COLOR,
   HP_BAR_FILL_COLOR,
   HP_BAR_LOW_COLOR,
   HP_BAR_LOW_THRESHOLD,
   HIT_FLASH_COLOR,
+  PLAYER_BADGE_BG_COLOR,
+  CPU_BADGE_BG_COLOR,
+  BADGE_TEXT_COLOR,
   cssHex,
 } from '@/constants/colors';
+import type { FloatingSegment } from '@/phaser/floating-events';
 
 const SPRITE_SCALE = 1.4;
-// pixelArt mode upscales every texture with nearest-neighbor, so the tiny
-// label textures turn blocky when the camera zooms in (up to
-// CAMERA_MAX_ZOOM). Rendering the labels at this many device pixels per CSS
-// pixel gives the zoom enough source detail to stay crisp; the pixel-art
-// sprites are untouched.
+// pixelArt mode renders every texture at this many device pixels per CSS
+// pixel so the labels carry enough source detail at the camera's max zoom
+// (CAMERA_MAX_ZOOM) and on high-DPR phone screens; the pixel-art sprites
+// are untouched.
 const LABEL_RESOLUTION = Math.ceil(CAMERA_MAX_ZOOM * Math.max(1, window.devicePixelRatio || 1));
+// pixelArt forces nearest-neighbor filtering on every texture, which is
+// right for the sprites but minifies the high-res label canvases into
+// blocky, unreadable text (worst on phones). The labels opt into smooth
+// linear filtering instead; it must be re-applied after each setText
+// because Phaser re-uploads the label texture (as nearest) on every edit.
+const LABEL_FILTER = Phaser.Textures.FilterMode.LINEAR;
+// Label font sizes (px before LABEL_RESOLUTION scaling). Sized for legibility
+// on a phone where the whole arena is fit into a small viewport.
+const HP_FONT_PX = '11px';
+const NAME_FONT_PX = '13px';
+// A small pill just left of a combatant's name marking who controls it in
+// the interactive duel: "1P" (red) for the player, "CPU" (gray) for the
+// opponent. Absent in the replay viewers.
+export type TokenBadge = 'player' | 'cpu';
+const BADGE_SPECS: Record<TokenBadge, { readonly label: string; readonly bg: number }> = {
+  player: { label: '1P', bg: PLAYER_BADGE_BG_COLOR },
+  cpu: { label: 'CPU', bg: CPU_BADGE_BG_COLOR },
+};
+const BADGE_FONT_PX = '5px';
+// The badges read as plain labels, so they use a simple sans-serif (the app's
+// system sans) rather than the monospace of the name/HP text.
+const BADGE_FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+// Pill corner radius as a fraction of its height (0.5 = full capsule).
+const BADGE_PILL_RADIUS_FRAC = 0.35;
+// Nudge the label off its bounding box so the glyphs sit centered in the pill
+// (the text box carries descent space below and side bearing on the left).
+const BADGE_TEXT_OFFSET_X = 1;
+const BADGE_TEXT_OFFSET_Y = 0.5;
+const BADGE_PAD_X = 2;
+const BADGE_PAD_Y = 1;
+const BADGE_GAP_PX = 5;
 // Feet sit at the container origin (the tile ground point); the head is
 // this far above it, so the HP bar and name sit just above the head.
 const DISPLAY_HEIGHT = CHARACTER_FRAME_PX * SPRITE_SCALE;
@@ -64,6 +96,30 @@ const RING_RADIUS_Y = GRID_TILE_PX * 0.2;
 const TILE_LOWER_HALF_CENTER_FRAC = 0.75;
 const RING_Y = (TILE_LOWER_HALF_CENTER_FRAC - TILE_GROUND_FRAC) * GRID_TILE_PX;
 
+// Floating "combat text": notifications that rise above the head when something
+// happens to the combatant, then fade. Multiple stack upward so they never sit
+// directly on top of each other. 'info' (the default) reads in yellow; 'error'
+// (e.g. an illegal spell cast the engine refused) reads in red.
+export type FloatingTextKind = 'info' | 'error';
+const FLOAT_INFO_COLOR = '#ffe44a';
+const FLOAT_ERROR_COLOR = '#ff6b6b';
+const FLOAT_TEXT_COLORS: Record<FloatingTextKind, string> = {
+  info: FLOAT_INFO_COLOR,
+  error: FLOAT_ERROR_COLOR,
+};
+// The above-head text font. Single knob: change this to restyle every floating
+// label at once.
+const FLOAT_TEXT_FONT_FAMILY = 'monospace';
+const FLOAT_TEXT_FONT_PX = '11px';
+// Black outline behind the floating text for legibility. Phaser pads each Text's
+// reported width by the stroke thickness (and draws the glyphs inset by half of
+// it), so the per-segment layout subtracts it to keep coloured runs flush.
+const FLOAT_STROKE_THICKNESS = 3;
+const FLOAT_BASE_Y = NAME_Y - 18; // just above the name
+const FLOAT_LINE_HEIGHT = 14; // vertical gap between stacked notifications
+const FLOAT_LIFETIME_MS = 5000;
+const FLOAT_FADE_MS = 700;
+
 export class TokenView {
   private readonly scene: Phaser.Scene;
   private readonly container: Phaser.GameObjects.Container;
@@ -72,7 +128,15 @@ export class TokenView {
   private readonly hpFill: Phaser.GameObjects.Rectangle;
   private readonly hpText: Phaser.GameObjects.Text;
   private readonly nameText: Phaser.GameObjects.Text;
-  private readonly teamColor: number;
+  private readonly badge?: Phaser.GameObjects.Text;
+  // Rounded-rect pill behind the badge text (Phaser text backgrounds are
+  // square, so the pill is drawn separately).
+  private readonly badgePill?: Phaser.GameObjects.Graphics;
+  private readonly badgeColor?: number;
+  // Active floating notifications, newest first (index 0 sits just above the
+  // head; older ones stack above it). Each is a container of one Text per
+  // segment, laid out in a row so names can carry their own class colour.
+  private readonly floatingLines: Phaser.GameObjects.Container[] = [];
   private readonly characterKey: string;
   private facing: 'left' | 'right';
   private facingSign: number;
@@ -84,7 +148,14 @@ export class TokenView {
   private dead = false;
   private destroyed = false;
 
-  constructor(scene: Phaser.Scene, placement: Placement, characterKey: string, name: string) {
+  constructor(
+    scene: Phaser.Scene,
+    placement: Placement,
+    characterKey: string,
+    name: string,
+    nameOutlineColor: number,
+    badge: TokenBadge | undefined,
+  ) {
     this.scene = scene;
     this.characterKey = characterKey;
     this.facing = placement.facing;
@@ -94,7 +165,6 @@ export class TokenView {
     // carries its own baked-in shadow, so no extra shadow is drawn here.
     const x = (placement.col + 0.5) * GRID_TILE_PX;
     const y = (placement.row + TILE_GROUND_FRAC) * GRID_TILE_PX;
-    this.teamColor = placement.team === 'A' ? TEAM_A_COLOR : TEAM_B_COLOR;
 
     this.ring = scene.add.graphics();
     this.idleTexture = animTextureKey(characterKey, 'idle');
@@ -118,34 +188,56 @@ export class TokenView {
     this.hpText = scene.add
       .text(0, BAR_Y, '', {
         fontFamily: 'monospace',
-        fontSize: '9px',
+        fontSize: HP_FONT_PX,
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 2,
         resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 0.5);
-    // The name's outline color marks which side the combatant is on.
+    // The name's outline color is the combatant's class color.
     this.nameText = scene.add
       .text(0, NAME_Y, name, {
         fontFamily: 'monospace',
-        fontSize: '11px',
+        fontSize: NAME_FONT_PX,
         color: '#e6e8ee',
-        stroke: cssHex(this.teamColor),
+        stroke: cssHex(nameOutlineColor),
         strokeThickness: 3,
         resolution: LABEL_RESOLUTION,
       })
       .setOrigin(0.5, 1);
+    this.hpText.texture.setFilter(LABEL_FILTER);
+    this.nameText.texture.setFilter(LABEL_FILTER);
 
-    this.container = scene.add.container(x, y, [
+    // Mark who controls this combatant with a rounded pill left of the name:
+    // a separate rounded-rect behind the label (drawn/positioned in layoutBadge).
+    if (badge) {
+      const spec = BADGE_SPECS[badge];
+      this.badgeColor = spec.bg;
+      this.badgePill = scene.add.graphics();
+      this.badge = scene.add
+        .text(0, NAME_Y, spec.label, {
+          fontFamily: BADGE_FONT_FAMILY,
+          fontSize: BADGE_FONT_PX,
+          color: cssHex(BADGE_TEXT_COLOR),
+          resolution: LABEL_RESOLUTION,
+        })
+        .setOrigin(1, 0.5);
+      this.badge.texture.setFilter(LABEL_FILTER);
+    }
+
+    const children: Phaser.GameObjects.GameObject[] = [
       this.ring,
       this.sprite,
       hpBg,
       this.hpFill,
       this.hpText,
       this.nameText,
-    ]);
+    ];
+    if (this.badgePill && this.badge) children.push(this.badgePill, this.badge);
+    this.container = scene.add.container(x, y, children);
     this.container.setDepth(RENDER_DEPTH.WORLD_BASE + y);
+    this.layoutBadge();
     this.drawRing(false);
   }
 
@@ -184,13 +276,104 @@ export class TokenView {
     this.blinkTimer = undefined;
   }
 
-  // Only the active combatant shows a ring; team is conveyed by the name
-  // outline instead.
+  // Only the active combatant shows a ring; the name outline conveys class.
   private drawRing(active: boolean): void {
     this.ring.clear();
     if (!active) return;
     this.ring.lineStyle(4, ACTIVE_RING_COLOR, 1);
     this.ring.strokeEllipse(0, RING_Y, RING_RADIUS_X * 2, RING_RADIUS_Y * 2);
+  }
+
+  // Set a label's text, re-applying linear filtering: Phaser re-uploads the
+  // label texture as nearest-neighbor on every setText (pixelArt default),
+  // which would otherwise leave the updated text blocky.
+  private setLabel(label: Phaser.GameObjects.Text, value: string): void {
+    label.setText(value);
+    label.texture.setFilter(LABEL_FILTER);
+  }
+
+  // Set the name label and keep the badge tucked against its left edge,
+  // vertically centered on the name text (the name is center/bottom-anchored,
+  // so the badge position depends on its width and height).
+  private setName(name: string): void {
+    this.setLabel(this.nameText, name);
+    this.layoutBadge();
+  }
+
+  private layoutBadge(): void {
+    if (!this.badge || !this.badgePill) return;
+    // The label is right/middle-anchored just left of the name; the pill wraps
+    // it with padding and fully rounded ends (radius = half its height).
+    const bx = -this.nameText.displayWidth / 2 - BADGE_GAP_PX;
+    const by = NAME_Y - this.nameText.displayHeight / 2;
+    const w = this.badge.displayWidth + BADGE_PAD_X * 2;
+    const h = this.badge.displayHeight + BADGE_PAD_Y * 2;
+    this.badgePill.clear();
+    this.badgePill.fillStyle(this.badgeColor ?? 0, 1);
+    this.badgePill.fillRoundedRect(bx - this.badge.displayWidth - BADGE_PAD_X, by - h / 2, w, h, h * BADGE_PILL_RADIUS_FRAC);
+    // Nudge the label off its box so the glyphs sit centered in the pill.
+    this.badge.setPosition(bx + BADGE_TEXT_OFFSET_X, by + BADGE_TEXT_OFFSET_Y);
+  }
+
+  // Pop a notification above the head describing something that just happened to
+  // (or was attempted by) this combatant. Each segment renders in its own colour
+  // (names in their class colour); segments with no colour use the line's info
+  // (yellow) or error (red) colour. New ones sit just above the head and push
+  // the others up so they stack rather than overlap; each fades out after a few
+  // seconds and the stack reflows.
+  addFloatingText(segments: ReadonlyArray<FloatingSegment>, kind: FloatingTextKind = 'info'): void {
+    if (this.destroyed || segments.length === 0) return;
+    const defaultColor = FLOAT_TEXT_COLORS[kind];
+    // Per-segment glyph advance = reported width minus the stroke padding Phaser
+    // adds, so adjacent runs sit flush rather than a stroke-width apart.
+    const parts = segments.map((segment) => {
+      const part = this.scene.add
+        .text(0, 0, segment.text, {
+          fontFamily: FLOAT_TEXT_FONT_FAMILY,
+          fontSize: FLOAT_TEXT_FONT_PX,
+          color: segment.color === undefined ? defaultColor : cssHex(segment.color),
+          stroke: '#000000',
+          strokeThickness: FLOAT_STROKE_THICKNESS,
+          resolution: LABEL_RESOLUTION,
+        })
+        .setOrigin(0, 1);
+      part.texture.setFilter(LABEL_FILTER);
+      return { text: part, advance: part.width - FLOAT_STROKE_THICKNESS };
+    });
+    // Centre the glyph run over the head: each Text's left edge is inset half a
+    // stroke from where its glyphs start, so back that out as we step along.
+    const glyphTotal = parts.reduce((sum, p) => sum + p.advance, 0);
+    let cursor = -glyphTotal / 2;
+    for (const { text, advance } of parts) {
+      text.x = cursor - FLOAT_STROKE_THICKNESS / 2;
+      cursor += advance;
+    }
+    const line = this.scene.add.container(0, FLOAT_BASE_Y, parts.map((p) => p.text));
+    this.container.add(line);
+    this.floatingLines.unshift(line);
+    this.reflowFloatingTexts();
+    this.scene.tweens.add({
+      targets: line,
+      alpha: 0,
+      delay: FLOAT_LIFETIME_MS - FLOAT_FADE_MS,
+      duration: FLOAT_FADE_MS,
+      onComplete: () => this.removeFloatingText(line),
+    });
+  }
+
+  // Stack the active notifications upward from just above the head.
+  private reflowFloatingTexts(): void {
+    this.floatingLines.forEach((line, i) => {
+      line.y = FLOAT_BASE_Y - i * FLOAT_LINE_HEIGHT;
+    });
+  }
+
+  private removeFloatingText(line: Phaser.GameObjects.Container): void {
+    const index = this.floatingLines.indexOf(line);
+    if (index < 0) return;
+    this.floatingLines.splice(index, 1);
+    line.destroy();
+    this.reflowFloatingTexts();
   }
 
   // Declarative: reflect the engine state at the cursor.
@@ -206,7 +389,7 @@ export class TokenView {
     this.scene.tweens.killTweensOf(this.hpFill);
     this.scene.tweens.add({ targets: this.hpFill, scaleX: frac, duration: HP_TWEEN_MS, ease: 'Quad.easeOut' });
     this.hpFill.setFillStyle(frac <= HP_BAR_LOW_THRESHOLD ? HP_BAR_LOW_COLOR : HP_BAR_FILL_COLOR);
-    this.hpText.setText(`${Math.max(0, character.hp.current)}/${character.hp.max}`);
+    this.setLabel(this.hpText, `${Math.max(0, character.hp.current)}/${character.hp.max}`);
 
     const isDead = character.hp.current <= 0;
     if (isDead && !this.dead) {
@@ -220,7 +403,7 @@ export class TokenView {
       this.playIdle();
     }
 
-    this.nameText.setText(character.name);
+    this.setName(character.name);
     this.drawRing(isActive);
   }
 
@@ -241,6 +424,27 @@ export class TokenView {
     if (!this.dead && !this.sprite.anims.isPlaying) {
       this.sprite.setTexture(this.idleTexture, this.restFrame);
     }
+  }
+
+  // This token's world x, so the scene can turn one combatant to face another.
+  get worldX(): number {
+    return this.container.x;
+  }
+
+  // Turn to face a target at the given world x (the combatant being attacked
+  // or targeted by a spell), so the avatar looks at who it acts on. Same-column
+  // targets keep the current facing.
+  faceToward(targetX: number): void {
+    const dx = targetX - this.container.x;
+    if (Math.abs(dx) > 0.5) this.setFacing(dx > 0 ? 'right' : 'left');
+  }
+
+  // True if a world-space point falls on the visible character sprite, so the
+  // scene can resolve a tap to this combatant (works in any movement mode,
+  // since it tests the sprite's real bounds rather than a grid cell).
+  hitTest(worldX: number, worldY: number): boolean {
+    if (this.destroyed || !this.container.visible) return false;
+    return this.sprite.getBounds().contains(worldX, worldY);
   }
 
   // Reflect a position change at the cursor (tactical mode): slide to the
@@ -317,7 +521,7 @@ export class TokenView {
   destroy(): void {
     this.destroyed = true;
     this.cancelBlink();
-    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container]);
+    this.scene.tweens.killTweensOf([this.sprite, this.hpFill, this.container, ...this.floatingLines]);
     this.container.destroy();
   }
 }

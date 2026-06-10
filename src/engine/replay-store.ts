@@ -1,25 +1,21 @@
 import type { Campaign } from 'dnd-srd-engine';
 import type { Session } from '@/state/session';
+import type { ReplaySnapshot, SnapshotListener, SnapshotSource } from './snapshot-source';
 import { buildScrubbed } from './scrub-cache';
 
 // Single source of truth for the replay cursor. Owns the current cursor,
 // materializes the campaign at that cursor via the session scrub cache,
 // and notifies subscribers (Phaser arena, event inspector, narrator
-// console) with a snapshot whenever the cursor or session changes.
-
-export interface ReplaySnapshot {
-  readonly session: Session;
-  readonly campaign: Campaign;
-  readonly cursor: number;
-  readonly totalEvents: number;
-}
-
-export type ReplayListener = (snapshot: ReplaySnapshot) => void;
+// console) with a snapshot whenever the cursor or session changes. The
+// snapshot contract itself lives in ./snapshot-source so the live duel
+// driver can emit the same shape; re-exported here for existing consumers.
+export type { ReplaySnapshot } from './snapshot-source';
+export type ReplayListener = SnapshotListener;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
-export class ReplayStore {
+export class ReplayStore implements SnapshotSource {
   private session: Session;
   private cursor: number;
   private campaign: Campaign;

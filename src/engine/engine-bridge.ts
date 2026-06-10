@@ -1,4 +1,4 @@
-import { resolveContent, type ContentPack, type ResolvedContent } from 'dnd-srd-engine';
+import { resolveContent, createEngine, seededRNG, replay, type ContentPack, type ResolvedContent, type Engine, type Campaign } from 'dnd-srd-engine';
 import { loadStarterPack } from 'dnd-srd-engine/starter-pack';
 import { runBattle, type FuzzVs, type FuzzMovement } from '@engine-fuzz';
 import { TEAM_SIZE_1V1, TEAM_SIZE_2V2, type FuzzMode, type FuzzVsKind } from '@/constants/app';
@@ -17,6 +17,13 @@ export interface BattleConfig {
   // Omitted/`'none'` is the positionless fuzz; `'tactical'` spawns combatants
   // on a generated map and moves them. Defaults to 'none'.
   readonly movement?: FuzzMovement;
+  // Pins team A (the player) to this class; undefined leaves it seed-random
+  // (engine slice 717). The map and opponent are unchanged by the pin.
+  readonly playerClass?: string;
+  // Renames team A's combatant (the player) for display. Cosmetic only: it
+  // rewrites the name on the CharacterCreated snapshot post-generation, so it
+  // never perturbs the seed stream. Undefined keeps the engine's name.
+  readonly playerName?: string;
 }
 
 // Compile-time guard that the app's local fuzz union stays assignable to
@@ -24,6 +31,20 @@ export interface BattleConfig {
 // silently at the runBattle call site.
 const _vsCheck: FuzzVs = 'pc' as FuzzVsKind;
 void _vsCheck;
+
+// Rewrite the player's display name on their CharacterCreated snapshot and
+// re-derive state from the edited events, so the token, battle log, and event
+// inspector all show it consistently (each replays the events). Cosmetic: it
+// touches only one event's name string, never the battle's dice or outcome,
+// so a renamed daily stays the same battle for everyone.
+const renamePlayer = (campaign: Campaign, playerId: string, name: string): Campaign => {
+  const events = campaign.events.map((event) =>
+    event.type === 'CharacterCreated' && event.snapshot.id === playerId
+      ? { ...event, snapshot: { ...event.snapshot, name } }
+      : event,
+  );
+  return { ...campaign, events, state: replay(events) };
+};
 
 // Owns the content pack (loaded once) and turns a BattleConfig into a
 // fully prepared Session: runs the deterministic fuzz battle, resolves
@@ -42,6 +63,13 @@ export class EngineBridge {
     return this.content;
   }
 
+  // A fresh engine instance for driving a live (player-controlled) duel:
+  // its seeded stream supplies the enemy's dice, deterministic for the daily
+  // run. Distinct from the one runBattle uses to generate the set-up.
+  createDuelEngine(seed: number): Engine {
+    return createEngine({ rng: seededRNG(seed), contentPacks: [this.pack] });
+  }
+
   startBattle(config: BattleConfig): Session {
     const result = runBattle({
       seed: config.seed,
@@ -52,9 +80,13 @@ export class EngineBridge {
       teamSize: config.mode === '2v2' ? TEAM_SIZE_2V2 : TEAM_SIZE_1V1,
       vs: config.vs,
       movement: config.movement ?? 'none',
+      playerClass: config.playerClass,
     });
 
-    const fullCampaign = result.campaign;
+    // Apply the optional player rename to team A[0] (cosmetic; see below).
+    const fullCampaign = config.playerName
+      ? renamePlayer(result.campaign, result.teamACharacterIds[0]!, config.playerName)
+      : result.campaign;
     const totalEvents = fullCampaign.events.length;
     const encounterId = findEncounterId(fullCampaign);
 

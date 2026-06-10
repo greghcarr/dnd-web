@@ -8,6 +8,39 @@ export const GROUND_BASE_COLOR = 0x2b2f3a;
 export const TEAM_A_COLOR = 0x4a89ff;
 export const TEAM_B_COLOR = 0xe7553c;
 
+// Each class's signature colour (the D&D Beyond class palette). Used to tint
+// character names in the turn banner and the floating combat text. Keys are
+// engine class ids (see DUEL_CLASS_IDS). Cleric is white.
+export const CLASS_COLORS: Readonly<Record<string, number>> = {
+  barbarian: 0xe7623e,
+  bard: 0xab6dac,
+  cleric: 0xffffff,
+  druid: 0x7a853b,
+  fighter: 0x7f513e,
+  monk: 0x51a5c5,
+  paladin: 0xb59e54,
+  ranger: 0x507f62,
+  rogue: 0x555752,
+  sorcerer: 0x992e2e,
+  warlock: 0x7b469b,
+  wizard: 0x2a50a1,
+};
+
+// A combatant's name label is outlined in their class's signature colour.
+// Cleric's colour is white, which would vanish behind the white name text, so
+// it outlines in black instead. Classless combatants (monsters in the replay
+// viewers) fall back to their team colour.
+export const CLASS_NAME_OUTLINE_COLORS: Readonly<Record<string, number>> = {
+  ...CLASS_COLORS,
+  cleric: 0x000000,
+};
+
+// Name badges on combatant tokens in the interactive duel: "1P" on the
+// player (pure blue), "CPU" on the opponent (gray); white text on both.
+export const PLAYER_BADGE_BG_COLOR = 0x0000ff;
+export const CPU_BADGE_BG_COLOR = 0x6b7280;
+export const BADGE_TEXT_COLOR = 0xffffff;
+
 export const ACTIVE_RING_COLOR = 0xffd54a;
 export const DOWNED_TINT = 0x555555;
 

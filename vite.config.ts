@@ -67,6 +67,10 @@ export default defineConfig({
     // Vite forbids serving files outside the project root by default;
     // the engine source is a sibling directory, so allow-list it.
     fs: { allow: [resolve(__dirname), ENGINE_ROOT] },
+    // Allow Cloudflare quick-tunnel hosts (cloudflared tunnel --url ...) so the
+    // dev server can be reached remotely for phone testing; the leading dot
+    // covers the random *.trycloudflare.com subdomain each tunnel gets.
+    allowedHosts: ['.trycloudflare.com'],
   },
   build: {
     target: 'es2022',

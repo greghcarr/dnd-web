@@ -4,15 +4,32 @@ import {
   DEFAULT_SEED,
   TACTICAL_DEFAULT_SEED,
   DEFAULT_LEVEL,
+  DAILY_LEVEL,
   DEFAULT_MODE,
   DEFAULT_VS,
   DEFAULT_APP_MODE_ID,
+  INTERACTIVE_DUEL_MODE_ID,
+  DUEL_CLASS_IDS,
 } from '@/constants/app';
+import { dailySeed, dailyClass } from '@/game/daily';
 import { RIGHT_COL_PX } from '@/constants/layout';
 import { EngineBridge, type BattleConfig } from '@/engine/engine-bridge';
 import { ReplayStore } from '@/engine/replay-store';
+import { SourceRouter } from '@/engine/source-router';
+import { ArenaInteraction } from '@/phaser/interaction';
+import { DuelSession } from '@/game/duel-session';
+import { DuelController } from '@/game/duel-controller';
+import type { RunConfig } from '@/game/run-config';
+import { ManualDiceSource, SeededDiceSource } from '@/game/dice-source';
+import { mountStartScreen } from '@/ui/start-screen';
+import { mountSignInScreen } from '@/ui/sign-in-screen';
+import { supabase } from '@/auth/supabase';
+import { fetchDuelCharacters, type DuelCharacterOption } from '@/auth/characters';
+import { mountDicePrompt } from '@/ui/dice-prompt';
 import { createGame } from '@/phaser/game';
 import { mountModeSelector } from '@/ui/mode-selector';
+import { mountEventInspector } from '@/ui/inspector/event-inspector';
+import { mountNarratorConsole } from '@/ui/console/narrator-console';
 import type { Mode, ModeContext } from '@/modes/mode';
 import { fuzzReplayViewerMode } from '@/modes/fuzz-replay-viewer';
 import type { FuzzMovement } from '@engine-fuzz';
@@ -44,6 +61,30 @@ const DEFAULT_CONFIG: BattleConfig = {
   movement: 'none',
 };
 
+// Describe today's daily player character for the start screen's daily tick,
+// e.g. "Level 5 Dragonborn Wizard". Built from the same seed + level + pinned
+// class + tactical config the daily duel uses (DuelSession), so the preview
+// matches the run. The class is pinned (dailyClass) so the daily is an exact,
+// replicable subset of the Free Duels.
+const describeDailyHero = (bridge: EngineBridge): string => {
+  const session = bridge.startBattle({
+    seed: dailySeed(),
+    mode: DEFAULT_MODE,
+    vs: DEFAULT_VS,
+    level: DAILY_LEVEL,
+    movement: 'tactical',
+    playerClass: dailyClass(),
+  });
+  const player = session.fullCampaign.state.characters[session.result.teamACharacterIds[0]!];
+  if (!player) return `Level ${DAILY_LEVEL}`;
+  const content = bridge.getContent();
+  const primary = player.classes.reduce((a, b) => (b.level > a.level ? b : a));
+  const totalLevel = player.classes.reduce((sum, c) => sum + c.level, 0);
+  const species = content.species.get(player.speciesId)?.name;
+  const className = content.classes.get(primary.classId)?.name ?? primary.classId;
+  return [`Level ${totalLevel}`, species, className].filter(Boolean).join(' ');
+};
+
 // Mode registry, keyed by the ids in APP_MODES. Both replay viewers reuse
 // the same panels; they differ in the movement kind of the battles they
 // generate and the seed each opens on. Add future modes here.
@@ -62,11 +103,51 @@ const boot = (): void => {
   setVersionBadge();
 
   const bridge = new EngineBridge();
+  // Classes the Free Duel can pin, with display names from the loaded pack.
+  const duelClassOptions = DUEL_CLASS_IDS.map((id) => ({
+    id,
+    name: bridge.getContent().classes.get(id)?.name ?? id,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  // Today's daily hero, described from the same battle the daily duel builds
+  // (same seed + level + tactical config), e.g. "Level 5 Human Berserker
+  // Barbarian". Generated once at boot; deterministic, so it matches the run.
+  const dailyHero = describeDailyHero(bridge);
+  // The duel menu's character picker: the signed-in player's dndbnb characters,
+  // formatted against the engine content. Empty in guest mode.
+  const loadCharacters = (): Promise<DuelCharacterOption[]> => fetchDuelCharacters(bridge.getContent());
   let currentConfig: BattleConfig = { ...DEFAULT_CONFIG };
   let currentMovement: FuzzMovement = currentConfig.movement ?? 'none';
   const store = new ReplayStore(bridge.startBattle(currentConfig));
 
-  createGame('game-root', store);
+  // The arena subscribes to the router, not a concrete store, so modes can
+  // point it at the replay store or a live duel without the scene caring.
+  const router = new SourceRouter(store);
+  // Shared channel for the live duel's cell overlay + tap input; inert until
+  // a duel sets marks and a click handler on it.
+  const interaction = new ArenaInteraction();
+  const game = createGame('game-root', router);
+  game.registry.set('interaction', interaction);
+
+  // Immersive toggle: collapse the right column to give the arena the full
+  // width (height on phones). Persisted; Phaser is told to re-fit on change.
+  const layoutEl = requireElement('layout');
+  const logsToggle = requireElement('logs-toggle');
+  const applyLogsCollapsed = (collapsed: boolean): void => {
+    layoutEl.classList.toggle('logs-collapsed', collapsed);
+    logsToggle.textContent = collapsed ? '⟨' : '⟩';
+    logsToggle.setAttribute('aria-label', collapsed ? 'Show logs' : 'Hide logs');
+    // Re-fit the canvas after the grid reflows via the same window-resize path
+    // Phaser handles natively (the arena's ResizeObserver also covers this).
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  };
+  // Always start with the side panel minimized so the arena leads; the toggle
+  // opens/closes it for the session (the choice isn't persisted).
+  let logsCollapsed = true;
+  applyLogsCollapsed(logsCollapsed);
+  logsToggle.addEventListener('click', () => {
+    logsCollapsed = !logsCollapsed;
+    applyLogsCollapsed(logsCollapsed);
+  });
 
   const ctx: ModeContext = {
     store,
@@ -82,8 +163,80 @@ const boot = (): void => {
   };
 
   let teardownMode: (() => void) | undefined;
+
+  // The interactive duel drives the engine live, so it points the arena at a
+  // fresh LiveStore rather than the shared replay store. It is distinct
+  // enough from the replay viewers to live in its own branch instead of the
+  // MODES table. (Player controls and the start screen are later slices; for
+  // now it stands up the live, set-up arena.)
+  const mountDuel = (): (() => void) => {
+    const gameRoot = requireElement('game-root');
+    // Either the start screen or a running duel is active at a time; this
+    // tears down whichever it is when the mode unmounts.
+    let teardownActive: () => void = () => {};
+
+    // Pre-duel menu: choose Daily / Free, then begin. `initial` pre-fills the
+    // form with a prior run's settings (so quitting/finishing reopens the menu
+    // exactly where that run was configured).
+    function showStart(initial?: RunConfig): void {
+      const start = mountStartScreen(gameRoot, duelClassOptions, dailyHero, loadCharacters, initial, (config) => {
+        start.unmount();
+        teardownActive = runDuel(config);
+      });
+      teardownActive = () => start.unmount();
+    }
+
+    // A running duel: live store + right-column logs (same as the replay
+    // viewers) + the command bar overlaying the arena. "New Duel" (shown on
+    // game over) returns to the start screen.
+    function runDuel(config: RunConfig): () => void {
+      // Manual dice (player's own rolls) only in free duels; daily runs are
+      // app-rolled. The prompt overlays the arena.
+      const dicePrompt = mountDicePrompt(gameRoot);
+      const dice = config.manualDice ? new ManualDiceSource(dicePrompt.ask) : new SeededDiceSource();
+      const duel = new DuelSession(bridge, config, dice);
+      router.setSource(duel.store);
+      ctx.content.innerHTML = `
+        <section id="event-inspector" class="panel" aria-label="Event log"></section>
+        <section id="narrator-console" class="panel" aria-label="Battle narration"></section>
+      `;
+      const inspectorEl = ctx.content.querySelector<HTMLElement>('#event-inspector');
+      const narratorEl = ctx.content.querySelector<HTMLElement>('#narrator-console');
+      if (!inspectorEl || !narratorEl) throw new Error('interactive-duel: missing log panels');
+      const inspector = mountEventInspector(inspectorEl, duel.store);
+      const narrator = mountNarratorConsole(narratorEl, duel.store);
+      const cleanup = (): void => {
+        dicePrompt.unmount();
+        inspector.unmount();
+        narrator.unmount();
+        ctx.content.replaceChildren();
+      };
+      const controller = new DuelController(duel, interaction, gameRoot, () => {
+        controller.teardown();
+        cleanup();
+        showStart(config);
+      });
+      // If the enemy won initiative, this runs its turn(s) before the player's.
+      void duel.begin();
+      return () => {
+        controller.teardown();
+        cleanup();
+      };
+    }
+
+    showStart();
+    return () => teardownActive();
+  };
+
   const switchMode = (modeId: string): void => {
     teardownMode?.();
+    if (modeId === INTERACTIVE_DUEL_MODE_ID) {
+      teardownMode = mountDuel();
+      return;
+    }
+    // Replay viewers share the scrubbed store; point the arena back at it in
+    // case we are leaving the live duel.
+    router.setSource(store);
     const entry = MODES[modeId] ?? MODES[DEFAULT_APP_MODE_ID]!;
     // Switching to a different movement kind reloads the battle so the arena
     // reflects the new mode immediately, opening on that mode's default seed.
@@ -95,8 +248,30 @@ const boot = (): void => {
     teardownMode = entry.mode.mount(ctx);
   };
 
-  mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
-  switchMode(DEFAULT_APP_MODE_ID);
+  // Build the duel UI (mode selector + start screen) only once the auth state
+  // is known, so the start screen's character picker fetches against the right
+  // session. The dndbnb-styled sign-in gate shows first unless a session already
+  // persists; signing in or continuing as a guest then reveals the app.
+  const startApp = (): void => {
+    mountModeSelector(requireElement('mode-selector'), DEFAULT_APP_MODE_ID, switchMode);
+    switchMode(DEFAULT_APP_MODE_ID);
+  };
+  void supabase.auth.getSession().then(({ data }) => {
+    if (data.session) {
+      startApp();
+      return;
+    }
+    const signIn = mountSignInScreen(document.body, {
+      onAuthed: () => {
+        signIn.unmount();
+        startApp();
+      },
+      onGuest: () => {
+        signIn.unmount();
+        startApp();
+      },
+    });
+  });
 };
 
 boot();

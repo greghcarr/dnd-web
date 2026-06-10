@@ -17,7 +17,10 @@ export const collapseToggleHtml = (title: string): string =>
 
 export const makeCollapsible = (panel: HTMLElement, toggle: HTMLButtonElement): void => {
   const chevron = toggle.querySelector<HTMLElement>('.collapse-chevron');
-  toggle.addEventListener('pointerdown', () => {
+  // Toggle on click (tap-release), not pointerdown: collapsing reflows the
+  // layout, and doing that mid-tap let the tap's click phase land on whatever
+  // shifted under the finger (e.g. the command bar's Move button on phones).
+  toggle.addEventListener('click', () => {
     const collapsed = panel.classList.toggle(COLLAPSED_CLASS);
     toggle.setAttribute('aria-expanded', String(!collapsed));
     if (chevron) chevron.textContent = collapsed ? CHEVRON_COLLAPSED : CHEVRON_EXPANDED;

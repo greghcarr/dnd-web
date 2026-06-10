@@ -7,3 +7,9 @@ declare const __APP_NAME__: string;
 declare const __APP_VERSION__: string;
 declare const __ENGINE_VERSION__: string;
 declare const __ENGINE_SHA__: string;
+
+// Supabase credentials for the dndbnb account integration (see .env.local.example).
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL: string;
+  readonly VITE_SUPABASE_ANON_KEY: string;
+}

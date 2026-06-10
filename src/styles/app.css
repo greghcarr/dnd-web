@@ -211,16 +211,17 @@ body {
   padding: 0.4rem 0.6rem;
 }
 
-/* Version badge overlays the map's bottom-left corner. */
+/* Version badge overlays the map's top-left corner (the bottom is owned by
+   the interactive duel's command bar). */
 #version-badge {
   position: absolute;
   left: 10px;
-  bottom: 8px;
+  top: 8px;
   z-index: 2;
   pointer-events: none;
   font-family: var(--mono);
   font-size: 0.72rem;
-  color: var(--text-dim);
+  color: #c4c9d2;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
@@ -386,16 +387,782 @@ body {
   white-space: pre-wrap;
 }
 
+/* Interactive duel: command bar overlays the bottom of the map area. The
+   container ignores pointer events so taps fall through to the arena; only
+   its controls capture them. Touch-first sizing; the button row wraps. */
+#command-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(10, 12, 16, 0.92), rgba(10, 12, 16, 0));
+  pointer-events: none;
+}
+#command-bar > * {
+  pointer-events: auto;
+}
+/* The player's turn resources (movement left + action/bonus/reaction pips), a
+   row just above the command-bar buttons. */
+.cmd-economy {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.cmd-pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #2c7d4f;
+  color: #eafff0;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+.cmd-pip.spent {
+  background: #3a3f4a;
+  color: #6a7180;
+}
+.cmd-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.cmd-btn {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.85rem;
+  color: var(--text);
+  background: rgba(35, 40, 52, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmd-btn:hover:not(:disabled) {
+  background: #2c3340;
+}
+.cmd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cmd-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 137, 255, 0.5);
+}
+.cmd-end {
+  margin-left: 0.6rem;
+}
+/* Highlight End Turn only when there's nothing left to do (no action and no
+   bonus action remaining), nudging the player to end their turn. */
+.cmd-end.suggested {
+  background: rgba(74, 137, 255, 0.22);
+  border-color: var(--accent);
+}
+.cmd-quit {
+  background: rgba(231, 85, 60, 0.2);
+  border-color: #e7553c;
+}
+
+/* Quit confirmation: a small yes/no modal over the arena. */
+#confirm-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.6);
+}
+#confirm-dialog[hidden] {
+  display: none;
+}
+.confirm-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1.2rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+.confirm-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.confirm-message {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+.confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.confirm-actions .start-btn {
+  flex: 1 1 0;
+}
+.confirm-yes {
+  background: rgba(231, 85, 60, 0.24);
+  border-color: #e7553c;
+}
+
+/* Tap-to-inspect tooltip with a combatant's stats, placed at the tap point.
+   pointer-events off so it never blocks the taps/clicks under it. */
+.char-tooltip {
+  position: fixed;
+  z-index: 8;
+  pointer-events: none;
+  max-width: 16rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(16, 19, 26, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.char-tooltip[hidden] {
+  display: none;
+}
+.tt-name {
+  font-weight: 700;
+}
+.tt-line {
+  color: var(--text-dim);
+}
+/* Spell list section at the bottom of the inspect tooltip. */
+.tt-spells-title {
+  margin-top: 0.35rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--panel-border);
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.tt-spell {
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+/* Interactive duel: large banner a quarter of the way down the arena
+   announcing whose turn it is. Player-centric (hidden in the replay viewers).
+   Never captures taps, so it doesn't block the arena beneath it. Colours map
+   to the relation: green = you, blue = ally (team A), red = enemy (team B). */
+.turn-banner {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(0.8rem, 2.75vw, 1.8rem);
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.85),
+    0 0 3px rgba(0, 0, 0, 0.9);
+  animation: turn-banner-in 260ms ease-out;
+}
+.turn-banner[hidden] {
+  display: none;
+}
+.turn-banner.turn-self {
+  color: #f2f4f8;
+}
+.turn-banner.turn-ally {
+  color: var(--team-a);
+}
+.turn-banner.turn-enemy {
+  color: var(--team-b);
+}
+@keyframes turn-banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Command-bar sub-menu (Actions now; Spells / Bonus later): a popup card
+   above the bar, with a transparent backdrop that closes it on outside tap. */
+#option-menu {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0.6rem 5rem;
+  pointer-events: auto;
+}
+#option-menu[hidden] {
+  display: none;
+}
+.menu-card {
+  width: min(300px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+.menu-title {
+  padding: 0.2rem 0.4rem 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.menu-item {
+  min-height: 2.6rem;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  color: var(--text);
+  background: #232834;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.menu-item:hover:not(:disabled) {
+  background: #2c3340;
+}
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Immersive toggle: collapse the right column so the arena fills the full
+   width (height on phones). Sits in the arena's top-right corner. */
+#logs-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+#logs-toggle:hover {
+  background: #2c3340;
+}
+#layout.logs-collapsed {
+  grid-template-columns: 1fr 0;
+}
+#layout.logs-collapsed #right {
+  display: none;
+}
+
+/* Pre-duel start screen: a centered card over the arena. */
+#start-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.86);
+  overflow-y: auto;
+}
+.start-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.4rem 1.5rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+.start-title {
+  margin: 0;
+  text-align: center;
+  font-size: 1.5rem;
+}
+.start-daily {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: rgba(74, 137, 255, 0.1);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+/* Rows the daily tick locks: dimmed, and their controls disabled. */
+.start-locked {
+  opacity: 0.5;
+}
+.start-card :disabled {
+  cursor: not-allowed;
+}
+.start-seed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.start-seed label {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.start-seed-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+.start-reroll {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--text);
+  background: #232834;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.start-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+/* Level row + its caveat, grouped so the warning tucks under the selector. */
+.start-level-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.start-level-warning {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: #ffd84d;
+}
+.start-select,
+.start-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+}
+.start-manual {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.start-btn {
+  min-height: 2.8rem;
+  padding: 0.6rem 1rem;
+  color: var(--text);
+  background: rgba(35, 40, 52, 0.96);
+  border: 1px solid var(--panel-border);
+  border-radius: 9px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.start-btn:hover {
+  background: #2c3340;
+}
+.start-primary {
+  background: rgba(74, 137, 255, 0.24);
+  border-color: var(--accent);
+}
+
+/* Post-duel Victory / Defeat screen. */
+#end-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.78);
+}
+.end-card {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.6rem 1.5rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+.end-title {
+  margin: 0;
+  font-size: 2rem;
+}
+.end-victory {
+  color: #b6f0c0;
+}
+.end-defeat {
+  color: #ff8e7a;
+}
+.end-note {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Manual-dice prompt: a small modal over the arena, one die at a time. */
+#dice-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.6);
+}
+#dice-prompt[hidden] {
+  display: none;
+}
+.dice-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+.dice-title {
+  margin: 0;
+  font-size: 1.3rem;
+}
+.dice-context {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.dice-input {
+  padding: 0.6rem;
+  text-align: center;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 1.3rem;
+}
+.dice-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.dice-actions button {
+  flex: 1 1 0;
+  min-height: 2.7rem;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dice-submit {
+  background: rgba(74, 137, 255, 0.24);
+  border-color: var(--accent);
+}
+.dice-app {
+  background: rgba(35, 40, 52, 0.96);
+}
+.dice-rest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Amount prompt: a small modal for a metered value (e.g. Lay on Hands HP). */
+#amount-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 12, 16, 0.6);
+}
+#amount-prompt[hidden] {
+  display: none;
+}
+.amount-card {
+  width: min(320px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+.amount-title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.amount-context {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.amount-input {
+  padding: 0.6rem;
+  text-align: center;
+  color: var(--text);
+  background: #20242e;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 1.3rem;
+}
+.amount-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.amount-actions button {
+  flex: 1 1 0;
+  min-height: 2.7rem;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.amount-submit {
+  background: rgba(74, 137, 255, 0.24);
+  border-color: var(--accent);
+}
+.amount-cancel {
+  background: rgba(35, 40, 52, 0.96);
+}
+
+/* Entry-gate sign-in screen, styled after dndbnb's account screen (its neutral
+   dark palette, distinct from the blue game UI). Full-screen over the running
+   app until the player continues as a guest. */
+#signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+  background: #131418;
+  color: #dbdee1;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+#signin-screen [hidden] {
+  display: none;
+}
+#signin-screen .auth-card {
+  width: min(22rem, 100%);
+  padding: 1.5rem;
+  text-align: center;
+  background: #1c1d22;
+  border: 1px solid #2e3138;
+  border-radius: 0.5rem;
+}
+#signin-screen .auth-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+}
+#signin-screen .auth-subtitle {
+  margin: 0 0 1rem;
+}
+#signin-screen .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+#signin-screen .auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #8a8f99;
+}
+#signin-screen .auth-form input {
+  font: inherit;
+  padding: 0.5rem;
+  background: #131418;
+  color: #dbdee1;
+  border: 1px solid #2e3138;
+  border-radius: 0.375rem;
+}
+#signin-screen .form-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8a8f99;
+}
+#signin-screen .form-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f26b6b;
+}
+#signin-screen .auth-submit {
+  margin-top: 0.25rem;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: #c0c4cb;
+  color: #15171a;
+  border: 1px solid #2e3138;
+  border-radius: 0.375rem;
+}
+#signin-screen .auth-toggle {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: #8a8f99;
+}
+#signin-screen .link-button {
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: #c0c4cb;
+  background: none;
+  border: none;
+  text-decoration: underline;
+}
+#signin-screen .guest-link {
+  font-size: 0.95rem;
+}
+
 /* Phones / narrow screens: stack the map on top and the panels below,
    instead of an unusable 384px side column. */
 @media (max-width: 720px) {
+  /* Bigger command-bar tap targets on touch screens. */
+  #command-bar .cmd-btn {
+    min-height: 3rem;
+    font-size: 1rem;
+  }
+  /* Collapsed: the arena fills the whole screen (single row, no panels). */
+  #layout.logs-collapsed {
+    grid-template-columns: 100%;
+    grid-template-rows: 100%;
+  }
+  #logs-toggle {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+  /* The menus and prompts fill the whole phone screen (not just the 42% map
+     row), so the cards have room and aren't clipped by the panels. */
+  #start-screen,
+  #dice-prompt,
+  #amount-prompt,
+  #end-screen,
+  #confirm-dialog {
+    position: fixed;
+  }
   #layout {
     grid-template-columns: 100%;
-    grid-template-rows: 42% 58%;
+    /* The arena takes the remaining space and the panel row sizes to its
+       content, so collapsing the log panels grows the arena to fill the
+       screen (the arena's ResizeObserver re-fits the camera). minmax(0, 1fr)
+       (not a bare 1fr) is essential: a bare 1fr's min is the canvas's
+       intrinsic size, which lets the arena grow but never shrink back, so
+       after expand -> re-minimize it would stay stuck. A 0 minimum makes the
+       arena track purely the available space. */
+    grid-template-rows: minmax(0, 1fr) auto;
   }
   #right {
     grid-column: 1;
     grid-row: 2;
+  }
+  /* Panels size to content (capped, scrolling within) instead of filling the
+     row, so the row shrinks as they collapse and the arena expands. */
+  #mode-content {
+    flex: 0 0 auto;
+  }
+  #event-inspector,
+  #narrator-console {
+    flex: 0 0 auto;
+  }
+  #event-inspector .panel-scroll,
+  #narrator-console .panel-scroll {
+    max-height: 26vh;
   }
   /* Larger touch targets for the transport and config controls. */
   #transport button {
