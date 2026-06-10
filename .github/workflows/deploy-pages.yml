@@ -63,6 +63,12 @@ jobs:
           NODE_ENV: production
           DND_ENGINE_PATH: ../dnd-srd-engine
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Supabase credentials for the dndbnb account integration; same values
+          # as the local .env.local. Add them under repo Settings -> Secrets and
+          # variables -> Actions. Without them the bundle's supabase client
+          # throws on load (white screen).
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - uses: actions/configure-pages@v6
